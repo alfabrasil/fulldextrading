@@ -369,28 +369,50 @@ export default function App() {
     triggerNotification('Sucesso', 'Solicitação de saque enviada!');
   };
 
-  const handleSwapAction = (fdtAmount) => {
-    const numFdt = Number(fdtAmount);
-    if (!numFdt || numFdt <= 0) return;
+  const handleSwapAction = (amount, direction = 'fdtToUsd') => {
+    const numAmount = Number(amount);
+    if (!numAmount || numAmount <= 0) return;
     
-    if (user.balances.fdt < numFdt) {
-      triggerNotification('Erro', 'Saldo FDT insuficiente.');
+    const rate = CONFIG.fdtRate;
+
+    if (direction === 'fdtToUsd') {
+      if (user.balances.fdt < numAmount) {
+        triggerNotification('Erro', 'Saldo FDT insuficiente.');
+        return;
+      }
+
+      const usdAmount = numAmount / rate;
+
+      setUser(prev => ({
+        ...prev,
+        balances: { 
+          ...prev.balances, 
+          fdt: prev.balances.fdt - numAmount,
+          usdt: prev.balances.usdt + usdAmount
+        },
+        history: [{ type: 'swap', amount: usdAmount, date: new Date().toLocaleTimeString(), desc: `${numAmount} FDT -> USD` }, ...prev.history]
+      }));
+      triggerNotification('Sucesso', `Troca realizada: +$${usdAmount.toFixed(2)}`);
       return;
     }
 
-    // Regra: 100 FDT = 1 USD
-    const usdAmount = numFdt / 100;
+    if (user.balances.usdt < numAmount) {
+      triggerNotification('Erro', 'Saldo USDT insuficiente.');
+      return;
+    }
+
+    const fdtAmount = numAmount * rate;
 
     setUser(prev => ({
       ...prev,
       balances: { 
         ...prev.balances, 
-        fdt: prev.balances.fdt - numFdt,
-        usdt: prev.balances.usdt + usdAmount
+        usdt: prev.balances.usdt - numAmount,
+        fdt: prev.balances.fdt + fdtAmount
       },
-      history: [{ type: 'swap', amount: usdAmount, date: new Date().toLocaleTimeString(), desc: `${numFdt} FDT -> USD` }, ...prev.history]
+      history: [{ type: 'swap', amount: fdtAmount, date: new Date().toLocaleTimeString(), desc: `$${numAmount.toFixed(2)} USD -> ${fdtAmount} FDT` }, ...prev.history]
     }));
-    triggerNotification('Sucesso', `Troca realizada: +$${usdAmount.toFixed(2)}`);
+    triggerNotification('Sucesso', `Troca realizada: +${fdtAmount} FDT`);
   };
 
 
@@ -899,7 +921,7 @@ export default function App() {
   );
 
   const BottomNav = () => (
-    <div className="fixed bottom-0 left-0 right-0 bg-gray-900/95 backdrop-blur-md border-t border-gray-800 p-2 z-50">
+    <div className="fixed bottom-0 left-0 right-0 bg-gray-900/95 backdrop-blur-md border-t border-gray-800 p-2 z-40">
       <div className="flex justify-around items-center">
         <NavBtn icon={TrendingUp} id="home" label="Home" active={view === 'home'} />
         <NavBtn icon={Gamepad2} id="game" label="Game" active={view === 'game'} />

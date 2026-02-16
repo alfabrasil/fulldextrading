@@ -16,18 +16,34 @@ export const WalletView = ({ t, user, formatCurrency, formatFDT, handleDepositAc
 
   // Swap State
   const [swapFdt, setSwapFdt] = useState('');
+  const [swapDirection, setSwapDirection] = useState('fdtToUsd');
 
   const networks = {
     usdt: ['BEP-20', 'TRC-20', 'POLYGON', 'ARBITRUM'],
     usdc: ['BEP-20', 'ARBITRUM']
   };
 
+  const FdtTokenCard = () => (
+    <div className="bg-gray-800 p-4 rounded-xl border border-yellow-400/30">
+      <div className="flex justify-between items-center">
+        <div>
+          <p className="text-yellow-400 font-bold text-lg">FDT Token</p>
+          <p className="text-xs text-gray-400">Internal Utility Token</p>
+        </div>
+        <div className="text-right">
+          <p className="text-white font-mono text-xl">{formatFDT(user.balances.fdt)}</p>
+          <p className="text-xs text-gray-500">100 FDT ≈ $1.00</p>
+        </div>
+      </div>
+    </div>
+  );
+
   const renderActionModal = () => {
     if (!action) return null;
 
     return (
       <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4">
-        <div className="bg-gray-900 w-full max-w-md rounded-2xl border border-gray-700 p-6 animate-slideUp">
+        <div className="bg-gray-900 w-full max-w-md rounded-2xl border border-gray-700 p-6 animate-slideUp max-h-[85vh] sm:max-h-[90vh] overflow-y-auto">
           <div className="flex justify-between items-center mb-6">
             <h3 className="text-xl font-bold text-white capitalize">{t[action]}</h3>
             <button onClick={() => setAction(null)} className="text-gray-400 hover:text-white"><X /></button>
@@ -149,26 +165,44 @@ export const WalletView = ({ t, user, formatCurrency, formatFDT, handleDepositAc
                     value={swapFdt}
                     onChange={(e) => setSwapFdt(e.target.value)}
                   />
-                  <span className="text-yellow-400 font-bold">FDT</span>
+                  <span className="text-yellow-400 font-bold">
+                    {swapDirection === 'fdtToUsd' ? 'FDT' : 'USD'}
+                  </span>
                 </div>
                 
-                <div className="my-4 text-gray-500"><ArrowRightLeft className="rotate-90" /></div>
+                <button 
+                  type="button"
+                  onClick={() => {
+                    setSwapDirection(prev => prev === 'fdtToUsd' ? 'usdToFdt' : 'fdtToUsd');
+                    setSwapFdt('');
+                  }}
+                  className="my-4 text-gray-500 hover:text-white bg-gray-900/60 border border-gray-700 rounded-full p-2 transition"
+                >
+                  <ArrowRightLeft className={swapDirection === 'fdtToUsd' ? 'rotate-90' : '-rotate-90'} />
+                </button>
 
                 <div className="text-center">
                   <p className="text-gray-400 text-sm mb-1">Você recebe</p>
                   <p className="text-3xl font-bold text-green-400">
-                    ${(Number(swapFdt) / 100).toFixed(2)}
+                    {swapDirection === 'fdtToUsd'
+                      ? `$${((Number(swapFdt) || 0) / 100).toFixed(2)}`
+                      : `${((Number(swapFdt) || 0) * 100).toFixed(0)}`
+                    }
                   </p>
-                  <span className="text-green-600 font-bold">USD</span>
+                  <span className="text-green-600 font-bold">
+                    {swapDirection === 'fdtToUsd' ? 'USD' : 'FDT'}
+                  </span>
                 </div>
               </div>
+
+              <FdtTokenCard />
 
               <div className="text-center text-xs text-gray-500">
                 Taxa de conversão: 100 FDT = $1.00 USD
               </div>
 
               <button 
-                onClick={() => { handleSwapAction(swapFdt); setAction(null); }}
+                onClick={() => { handleSwapAction(swapFdt, swapDirection); setAction(null); }}
                 className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-lg"
               >
                 CONFIRMAR TROCA
@@ -213,18 +247,7 @@ export const WalletView = ({ t, user, formatCurrency, formatFDT, handleDepositAc
         </div>
       </div>
 
-      <div className="bg-gray-800 p-4 rounded-xl border border-yellow-400/30">
-        <div className="flex justify-between items-center">
-          <div>
-            <p className="text-yellow-400 font-bold text-lg">FDT Token</p>
-            <p className="text-xs text-gray-400">Internal Utility Token</p>
-          </div>
-          <div className="text-right">
-            <p className="text-white font-mono text-xl">{formatFDT(user.balances.fdt)}</p>
-            <p className="text-xs text-gray-500">100 FDT ≈ $1.00</p>
-          </div>
-        </div>
-      </div>
+      <FdtTokenCard />
 
       {/* Transaction History Mini */}
       <div>
