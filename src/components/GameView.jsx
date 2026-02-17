@@ -2,49 +2,10 @@ import React, { useState } from 'react';
 import { Gamepad2, Zap, Trophy, Play, Lock, AlertTriangle, Battery } from 'lucide-react';
 import { CONFIG } from '../data/config';
 import { QuantumDash } from './QuantumDash';
-
-// Jogo Original: Vault Hacker (Componente Interno)
-const VaultHacker = ({ t, handleGamePlay, onClose }) => (
-  <div className="h-full flex flex-col animate-fadeIn px-4 pb-24 relative">
-    <button onClick={onClose} className="absolute top-0 left-4 text-gray-400 hover:text-white flex items-center gap-2 text-sm z-10">
-      &larr; Hub
-    </button>
-    <div className="flex-1 flex flex-col items-center justify-center text-center space-y-8 mt-8">
-      <div className="bg-gray-900 border border-purple-500/50 p-8 rounded-full shadow-[0_0_50px_rgba(168,85,247,0.2)] relative animate-pulse">
-        <Gamepad2 size={64} className="text-purple-500" />
-      </div>
-
-      <div>
-        <h2 className="text-3xl font-black text-white uppercase tracking-wider font-mono">
-          VAULT <span className="text-purple-500">HACKER</span>
-        </h2>
-        <p className="text-gray-400 mt-2 text-sm max-w-[250px] mx-auto">
-          Quebre a criptografia do cofre para ganhar recompensas instantâneas.
-        </p>
-      </div>
-
-      <div className="bg-gray-800 p-4 rounded-lg w-full max-w-xs border border-gray-700">
-        <div className="flex justify-between text-sm mb-2">
-          <span className="text-gray-400">Custo</span>
-          <span className="text-white">{CONFIG.gameCost} FDT</span>
-        </div>
-        <div className="flex justify-between text-sm mb-4">
-          <span className="text-gray-400">Prêmio</span>
-          <span className="text-green-400 font-bold">{CONFIG.gameCost * 2} FDT</span>
-        </div>
-        <button 
-          onClick={handleGamePlay}
-          className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 rounded-lg shadow-lg border-b-4 border-purple-800 active:border-b-0 active:mt-1 transition-all flex items-center justify-center gap-2"
-        >
-          <Play size={18} fill="currentColor" /> {t.hack.toUpperCase()}
-        </button>
-      </div>
-    </div>
-  </div>
-);
+import { VaultHacker } from './VaultHacker';
 
 // HUB DE JOGOS
-export const GameView = ({ t, user, handleGamePlay, handleQuantumGameOver, handleBuyCredits }) => {
+export const GameView = ({ t, user, handleGamePlay, handleQuantumGameOver, handleVaultResult, handleBuyCredits, formatFDT }) => {
   const [activeGame, setActiveGame] = useState(null); // null (hub), 'vault', 'quantum'
 
   const games = [
@@ -81,7 +42,13 @@ export const GameView = ({ t, user, handleGamePlay, handleQuantumGameOver, handl
   ];
 
   if (activeGame === 'vault') {
-    return <VaultHacker t={t} handleGamePlay={handleGamePlay} onClose={() => setActiveGame(null)} />;
+    return (
+      <VaultHacker 
+        onClose={() => setActiveGame(null)} 
+        onResult={handleVaultResult}
+        userBalance={user.balances.fdt}
+      />
+    );
   }
 
   if (activeGame === 'quantum') {
@@ -127,6 +94,32 @@ export const GameView = ({ t, user, handleGamePlay, handleQuantumGameOver, handl
          >
            REFILL +
          </button>
+      </div>
+
+      {/* FDT Token Card (Game Context) */}
+      <div className="bg-gray-800 p-4 rounded-xl border border-yellow-400/30 mb-6 relative overflow-hidden shadow-lg">
+        {/* Background Effect */}
+        <div className="absolute -right-6 -top-6 w-24 h-24 bg-yellow-500/10 rounded-full blur-xl animate-pulse"></div>
+        
+        <div className="flex justify-between items-center relative z-10">
+          <div className="flex items-center gap-3">
+            <div className="bg-yellow-500/20 p-3 rounded-xl border border-yellow-500/30">
+              <Trophy size={24} className="text-yellow-400" />
+            </div>
+            <div>
+              <p className="text-yellow-400 font-bold text-lg leading-none">FDT Token</p>
+              <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider mt-1">Game Balance</p>
+            </div>
+          </div>
+          <div className="text-right">
+            <p className="text-white font-mono text-2xl font-bold tracking-tight drop-shadow-md">
+              {formatFDT ? formatFDT(user.balances.fdt) : `${user.balances.fdt} FDT`}
+            </p>
+            <p className="text-[10px] text-gray-500 font-mono mt-1 bg-black/20 px-2 py-0.5 rounded-full inline-block">
+              100 FDT ≈ $1.00
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* Game Grid */}

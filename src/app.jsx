@@ -286,6 +286,50 @@ export default function App() {
     else triggerNotification('Game', t.lose);
   };
 
+  const handleVaultResult = (win, amount) => {
+    setUser(prev => {
+      let newBalance = prev.balances.fdt;
+      let historyItem = null;
+
+      if (win) {
+         // Ganhou: Recebe o dobro do valor apostado (lucro líquido = amount)
+         // Como o custo foi "apostado", se ele já foi debitado antes, aqui creditamos 2x.
+         // Se não foi debitado antes (estratégia atual), aqui creditamos apenas o lucro (amount).
+         // Vamos assumir que o débito ocorre no momento do resultado para simplificar (ou seja, se perder, debita amount).
+         // Se ganhar, ganha amount (o saldo original se mantém + lucro).
+         
+         // Lógica simplificada:
+         // Se Win: Saldo += amount (Lucro)
+         // Se Loss: Saldo -= amount (Prejuízo)
+         
+         newBalance += amount;
+         historyItem = { 
+             type: 'game_win', 
+             amount: amount, 
+             date: new Date().toLocaleTimeString(), 
+             desc: 'Vault Hacker Win' 
+         };
+      } else {
+         newBalance -= amount;
+         historyItem = { 
+             type: 'game_loss', 
+             amount: amount, 
+             date: new Date().toLocaleTimeString(), 
+             desc: 'Vault Hacker Loss' 
+         };
+      }
+
+      return {
+        ...prev,
+        balances: { ...prev.balances, fdt: newBalance },
+        history: [historyItem, ...prev.history]
+      };
+    });
+
+    if (win) triggerNotification('Vault Hacker', `SYSTEM HACKED! +${amount} FDT`);
+    else triggerNotification('Vault Hacker', `ACCESS DENIED! -${amount} FDT`);
+  };
+
   const handleQuantumGameOver = (score, sparks) => {
     setUser(prev => {
       const newHighScore = Math.max(prev.quantumStats?.highScore || 0, score);
@@ -988,7 +1032,9 @@ export default function App() {
             user={user} 
             handleGamePlay={handleGamePlay} 
             handleQuantumGameOver={handleQuantumGameOver}
+            handleVaultResult={handleVaultResult}
             handleBuyCredits={handleBuyCredits}
+            formatFDT={formatFDT}
           />
         )}
         
