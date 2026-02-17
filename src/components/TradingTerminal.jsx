@@ -11,33 +11,116 @@ export const TradingTerminal = ({ activePlan, onSync }) => {
   const [opsCount, setOpsCount] = useState(0);
   const [trend, setTrend] = useState('bull');
   const [timeLeft, setTimeLeft] = useState(300); // 5 minutos em segundos
-
+  
   const priceRef = useRef(96420.50);
   const profitBufferRef = useRef(0); // Para acumular lucro sem re-renderizar tudo
   const opsCountRef = useRef(0); // Ref para acesso síncrono no timer
+  const cycleStartRef = useRef(Date.now()); // Para rastrear início do ciclo
+
+  // Recuperar estado ao montar ou iniciar
+  useEffect(() => {
+    const savedState = localStorage.getItem('hft_cycle_state_v2');
+    if (savedState) {
+      try {
+        const parsed = JSON.parse(savedState);
+        
+        // Validar se o estado salvo pertence ao plano atual
+        if (parsed.planId !== activePlan.planId) {
+            // Se mudou de plano, descarta o estado anterior e inicia novo
+            localStorage.removeItem('hft_cycle_state_v2');
+            cycleStartRef.current = Date.now();
+            return;
+        }
+
+        const now = Date.now();
+        const elapsed = (now - parsed.startTime) / 1000;
+        
+        if (elapsed < 300) {
+           // Ciclo ainda válido
+           const remaining = 300 - elapsed;
+           setTimeLeft(remaining);
+           cycleStartRef.current = parsed.startTime;
+           
+           // Restaurar acumulados visuais
+           if (parsed.profit) {
+             setSessionProfit(parsed.profit);
+             profitBufferRef.current = parsed.profit;
+           }
+           if (parsed.ops) {
+             setOpsCount(parsed.ops);
+             opsCountRef.current = parsed.ops;
+             // Se tiver operações salvas, restaurar (opcional, mas bom para UX)
+             if (parsed.opsList) setOps(parsed.opsList);
+           }
+        } else {
+           // Ciclo expirou enquanto estava fora
+           // Processar o que tinha acumulado no storage
+           if (parsed.profit !== 0 || parsed.ops > 0) {
+              onSync(parsed.profit, parsed.ops);
+           }
+           // Iniciar novo ciclo
+           cycleStartRef.current = now;
+           localStorage.removeItem('hft_cycle_state_v2');
+        }
+      } catch (e) {
+        console.error("Erro ao recuperar estado HFT", e);
+        cycleStartRef.current = Date.now();
+      }
+    } else {
+      cycleStartRef.current = Date.now();
+    }
+  }, [activePlan.planId]); // Executa na montagem ou se mudar o plano
+
+  // Salvar estado periodicamente
+  useEffect(() => {
+    const saveInterval = setInterval(() => {
+       const state = {
+         planId: activePlan.planId, // Salva ID do plano para validação
+         startTime: cycleStartRef.current,
+         profit: profitBufferRef.current,
+         ops: opsCountRef.current,
+         opsList: ops.slice(0, 10), // Salvar últimas ops para restaurar visual
+         lastUpdate: Date.now()
+       };
+       localStorage.setItem('hft_cycle_state_v2', JSON.stringify(state));
+    }, 2000); // Salva a cada 2s
+
+    return () => clearInterval(saveInterval);
+  }, [ops, activePlan.planId]);
 
   // Timer de 5 Minutos (Ciclo de Sincronização)
   useEffect(() => {
     const timer = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev <= 1) {
-          // Ciclo fechou! Sincronizar com App usando Refs
+      const now = Date.now();
+      const elapsed = (now - cycleStartRef.current) / 1000;
+      const remaining = 300 - elapsed;
+
+      if (remaining <= 0) {
+          // Ciclo fechou!
           if (profitBufferRef.current !== 0 || opsCountRef.current > 0) {
              onSync(profitBufferRef.current, opsCountRef.current);
           }
-          // Resetar buffer da sessão
+          
+          // Resetar
           setSessionProfit(0);
           setOpsCount(0);
+          setOps([]); // Limpar ops visuais
           opsCountRef.current = 0;
           profitBufferRef.current = 0;
-          return 300; // Reinicia ciclo
-        }
-        return prev - 1;
-      });
+          
+          // Novo ciclo
+          cycleStartRef.current = Date.now();
+          setTimeLeft(300);
+          
+          // Limpar storage do ciclo anterior
+          localStorage.removeItem('hft_cycle_state_v2');
+      } else {
+          setTimeLeft(remaining);
+      }
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [onSync]); // Removemos opsCount da dependência para evitar reset do timer
+  }, [onSync]);
 
   // Engine de Simulação (HFT)
   useEffect(() => {
