@@ -19,7 +19,7 @@ export const PlansView = ({ t, handleActivatePlan, userBalance, user }) => {
   const handleConfirm = () => {
     if (!selectedPlan) return;
     const val = parseFloat(amount);
-    if (isNaN(val) || val < selectedPlan.min) {
+    if (isNaN(val) || val < selectedPlan.min || (selectedPlan.max && val > selectedPlan.max)) {
         // Validation handled by parent usually, but good to have UI feedback here
         return; 
     }
@@ -99,9 +99,9 @@ export const PlansView = ({ t, handleActivatePlan, userBalance, user }) => {
             </div>
 
             <div className="text-right">
-               <p className="text-[10px] text-gray-500 mb-1">Entrada Mínima</p>
+               <p className="text-[10px] text-gray-500 mb-1">Entrada Mín / Máx</p>
                <p className="text-white font-bold text-sm bg-gray-900/50 px-2 py-1 rounded inline-block border border-gray-700">
-                 ${plan.min}
+                 ${plan.min} - ${plan.max}
                </p>
             </div>
           </div>
@@ -162,6 +162,11 @@ export const PlansView = ({ t, handleActivatePlan, userBalance, user }) => {
                                 <AlertCircle size={12} /> Mínimo: ${selectedPlan.min}
                             </p>
                         )}
+                         {selectedPlan.max && parseFloat(amount) > selectedPlan.max && (
+                            <p className="text-red-500 text-xs mt-2 flex items-center gap-1">
+                                <AlertCircle size={12} /> Máximo: ${selectedPlan.max}
+                            </p>
+                        )}
                     </div>
 
                     <div className="bg-gray-800/50 p-4 rounded-xl border border-gray-700/50 space-y-2">
@@ -181,7 +186,7 @@ export const PlansView = ({ t, handleActivatePlan, userBalance, user }) => {
 
                     <button 
                         onClick={handleConfirm}
-                        disabled={!amount || parseFloat(amount) < selectedPlan.min || parseFloat(amount) > userBalance}
+                        disabled={!amount || parseFloat(amount) < selectedPlan.min || (selectedPlan.max && parseFloat(amount) > selectedPlan.max) || parseFloat(amount) > userBalance}
                         className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white font-black py-4 rounded-xl shadow-lg border-b-4 border-green-800 active:border-b-0 active:mt-1 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                     >
                         <Check size={20} /> CONFIRMAR ATIVAÇÃO
