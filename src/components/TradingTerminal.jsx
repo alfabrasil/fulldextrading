@@ -4,18 +4,21 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Cpu, Activity, ShieldCheck, Zap, ArrowUp, ArrowDown, Clock } from 'lucide-react';
 
 export const TradingTerminal = ({ activePlan, onSync }) => {
-  const [price, setPrice] = useState(96420.50);
-  const [history, setHistory] = useState(Array(40).fill(96420.50));
+  const [price, setPrice] = useState(1.0542);
+  const [history, setHistory] = useState(Array(40).fill(1.0542));
   const [ops, setOps] = useState([]);
   const [sessionProfit, setSessionProfit] = useState(0);
   const [opsCount, setOpsCount] = useState(0);
   const [trend, setTrend] = useState('bull');
-  const [timeLeft, setTimeLeft] = useState(300); // 5 minutos em segundos
+  const [minuteTimeLeft, setMinuteTimeLeft] = useState(60);
+  const [minuteReport, setMinuteReport] = useState(null);
+  const [currentMinuteStats, setCurrentMinuteStats] = useState({ wins: 0, losses: 0, profit: 0, ops: 0 });
   
-  const priceRef = useRef(96420.50);
+  const priceRef = useRef(1.0542);
   const profitBufferRef = useRef(0); // Para acumular lucro sem re-renderizar tudo
   const opsCountRef = useRef(0); // Ref para acesso síncrono no timer
   const cycleStartRef = useRef(Date.now()); // Para rastrear início do ciclo
+  const currentMinuteStatsRef = useRef({ wins: 0, losses: 0, profit: 0, ops: 0 }); // Ref para evitar dependências circulares
 
   // Recuperar estado ao montar ou iniciar
   useEffect(() => {
@@ -35,11 +38,16 @@ export const TradingTerminal = ({ activePlan, onSync }) => {
         const now = Date.now();
         const elapsed = (now - parsed.startTime) / 1000;
         
-        if (elapsed < 300) {
+        if (elapsed < 60) {
            // Ciclo ainda válido
-           const remaining = 300 - elapsed;
-           setTimeLeft(remaining);
+           const remaining = Math.max(0, 60 - Math.floor(elapsed));
+           setMinuteTimeLeft(remaining);
            cycleStartRef.current = parsed.startTime;
+           
+           // Restore lastSimTimeRef to ensure catch-up works on reload
+           if (parsed.lastUpdate) {
+               lastSimTimeRef.current = parsed.lastUpdate;
+           }
            
            // Restaurar acumulados visuais
            if (parsed.profit) {
@@ -88,73 +96,131 @@ export const TradingTerminal = ({ activePlan, onSync }) => {
     return () => clearInterval(saveInterval);
   }, [ops, activePlan.planId]);
 
-  // Timer de 5 Minutos (Ciclo de Sincronização)
-  useEffect(() => {
-    const timer = setInterval(() => {
-      const now = Date.now();
-      const elapsed = (now - cycleStartRef.current) / 1000;
-      const remaining = 300 - elapsed;
+  const trendRef = useRef('bull');
+  const lastSimTimeRef = useRef(Date.now());
 
-      if (remaining <= 0) {
-          // Ciclo fechou!
-          if (profitBufferRef.current !== 0 || opsCountRef.current > 0) {
-             onSync(profitBufferRef.current, opsCountRef.current);
-          }
-          
-          // Resetar
-          setSessionProfit(0);
-          setOpsCount(0);
-          setOps([]); // Limpar ops visuais
-          opsCountRef.current = 0;
-          profitBufferRef.current = 0;
-          
-          // Novo ciclo
-          cycleStartRef.current = Date.now();
-          setTimeLeft(300);
-          
-          // Limpar storage do ciclo anterior
-          localStorage.removeItem('hft_cycle_state_v2');
-      } else {
-          setTimeLeft(remaining);
-      }
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, [onSync]);
-
-  // Engine de Simulação (HFT)
+  // Main HFT Engine Loop (Timer + Simulation + Catch-up)
   useEffect(() => {
     const interval = setInterval(() => {
+      const now = Date.now();
+      const cycleStart = cycleStartRef.current;
+      const elapsed = (now - cycleStart) / 1000;
+      
+      // --- 1. Cycle Management ---
+      if (elapsed >= 60) {
+        // End of Cycle
+        const stats = currentMinuteStatsRef.current;
+        setMinuteReport({
+            ...stats,
+            timestamp: new Date().toLocaleTimeString(),
+            id: now
+        });
+        
+        if (profitBufferRef.current !== 0 || opsCountRef.current > 0) {
+             onSync(profitBufferRef.current, opsCountRef.current);
+             profitBufferRef.current = 0;
+             opsCountRef.current = 0;
+        }
+
+        // Reset
+        cycleStartRef.current = now;
+        lastSimTimeRef.current = now; 
+        currentMinuteStatsRef.current = { wins: 0, losses: 0, profit: 0, ops: 0 };
+        setCurrentMinuteStats({ wins: 0, losses: 0, profit: 0, ops: 0 });
+        setMinuteTimeLeft(60);
+        return; 
+      }
+      
+      setMinuteTimeLeft(Math.max(0, 60 - Math.floor(elapsed)));
+
+      // --- 2. Simulation Catch-up ---
+      const timeSinceLastSim = now - lastSimTimeRef.current;
+      // We target ~1 step per 1000ms
+      const stepDuration = 1000; 
+      const stepsToCatchUp = Math.floor(timeSinceLastSim / stepDuration);
+      
+      if (stepsToCatchUp > 0) {
+         for (let i = 0; i < stepsToCatchUp; i++) {
+             simulateStep();
+         }
+         lastSimTimeRef.current += stepsToCatchUp * stepDuration;
+      }
+      
+    }, 1000); 
+
+    return () => clearInterval(interval);
+  }, [activePlan, onSync]);
+
+  const simulateStep = () => {
       // 1. Simulação de Preço
       const volatility = 0.0005;
-      const trendBias = trend === 'bull' ? 0.0002 : -0.0002;
+      const trendBias = trendRef.current === 'bull' ? 0.0002 : -0.0002;
       const change = priceRef.current * (volatility * (Math.random() - 0.5) + trendBias);
       const newPrice = priceRef.current + change;
       
       priceRef.current = newPrice;
       setPrice(newPrice);
-      
       setHistory(prev => [...prev.slice(1), newPrice]);
 
       // Mudar tendência
-      if (Math.random() < 0.05) setTrend(t => t === 'bull' ? 'bear' : 'bull');
+      if (Math.random() < 0.05) {
+          trendRef.current = trendRef.current === 'bull' ? 'bear' : 'bull';
+          setTrend(trendRef.current);
+      }
 
-      // 2. Execução de Ordens (Baseado no Plano Ativo)
-      if (Math.random() < 0.4) { 
-        const isWin = Math.random() > 0.35; 
-        const type = Math.random() > 0.5 ? 'SCALP' : 'HEDGE';
-        const side = trend === 'bull' ? 'LONG' : 'SHORT';
+      // 2. Execução de Ordens
+      if (Math.random() < 0.35) { 
+        const exchange = Math.random() > 0.5 ? 'CASATRADE' : 'EXNOVA';
+        const randType = Math.random();
+        let pair, type, side;
         
-        // Lucro base proporcional ao investimento (simulação)
-        // Ex: $1000 investidos -> ~$0.05 por operação vencedora média
-        const baseProfit = (activePlan.amount * 0.00005); 
-        const pnl = isWin ? (baseProfit * (1 + Math.random())) : -(baseProfit * 0.5);
+        if (randType < 0.80) {
+            const pairs = ['EUR/USD', 'GBP/USD', 'USD/JPY', 'AUD/CAD', 'EUR/JPY', 'USD/CHF', 'NZD/USD'];
+            pair = pairs[Math.floor(Math.random() * pairs.length)];
+            type = 'BINARY';
+        } else if (randType < 0.90) {
+            const cryptos = ['BTC/USD', 'ETH/USD', 'SOL/USD', 'XRP/USD', 'DOGE/USD'];
+            pair = cryptos[Math.floor(Math.random() * cryptos.length)];
+            type = 'CRYPTO';
+        } else {
+            const stocks = ['AAPL', 'TSLA', 'AMZN', 'GOOGL', 'NVDA', 'MSFT', 'META'];
+            pair = stocks[Math.floor(Math.random() * stocks.length)];
+            type = 'STOCK';
+        }
+
+        const dailyRoiPercent = activePlan.roiTotal / activePlan.duration;
+        const targetDailyProfit = activePlan.amount * (dailyRoiPercent / 100);
+        const targetMinuteProfit = targetDailyProfit / 1440; 
         
-        const exchange = ['BINANCE', 'OKX', 'BYBIT', 'DERIBIT'][Math.floor(Math.random() * 4)];
-        const pair = ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'BNB/USDT'][Math.floor(Math.random() * 4)];
+        const entryAmount = activePlan.amount * 0.001; 
+        const payout = 0.90; 
+
+        const currentMinuteProfit = currentMinuteStatsRef.current.profit;
+        
+        const now = new Date();
+        const secondsInMinute = now.getSeconds();
+        const expectedProfitNow = (targetMinuteProfit / 60) * secondsInMinute;
+
+        let isWin;
+        
+        if (currentMinuteProfit < expectedProfitNow - (entryAmount * 2)) {
+             isWin = true;
+        } 
+        else if (currentMinuteProfit > expectedProfitNow + (entryAmount * 3)) {
+             isWin = false;
+        } 
+        else {
+             const baseWinRate = 0.58; 
+             const noise = (Math.random() - 0.5) * 0.10; 
+             isWin = Math.random() < (baseWinRate + noise);
+        }
+
+        side = trendRef.current === 'bull' ? 'CALL' : 'PUT';
+        
+        const pnl = isWin ? (entryAmount * payout) : -entryAmount;
 
         const newOp = {
-          id: Date.now(),
+          id: Date.now() + Math.random(), // Ensure unique ID in fast loop
           exchange,
           pair,
           type,
@@ -163,23 +229,28 @@ export const TradingTerminal = ({ activePlan, onSync }) => {
           time: new Date().toLocaleTimeString()
         };
 
-        setOps(prev => [newOp, ...prev.slice(0, 6)]); // Manter últimas 7 na tela
+        setOps(prev => [newOp, ...prev.slice(0, 6)]); 
         
-        if (isWin) {
-            setSessionProfit(p => p + pnl);
-            profitBufferRef.current += pnl;
-        } else {
-            setSessionProfit(p => p + pnl); // Subtrai loss do buffer visual
-            profitBufferRef.current += pnl; // Subtrai loss do real
-        }
-        setOpsCount(c => c + 1);
+        setSessionProfit(p => p + pnl);
+        profitBufferRef.current += pnl;
+        
         opsCountRef.current += 1;
+        setOpsCount(c => c + 1);
+
+        currentMinuteStatsRef.current.ops += 1;
+        currentMinuteStatsRef.current.profit += pnl;
+        if (isWin) currentMinuteStatsRef.current.wins += 1;
+        else currentMinuteStatsRef.current.losses += 1;
+        
+        setCurrentMinuteStats(prev => ({
+            ...prev,
+            ops: prev.ops + 1,
+            profit: prev.profit + pnl,
+            wins: isWin ? prev.wins + 1 : prev.wins,
+            losses: isWin ? prev.losses : prev.losses + 1
+        }));
       }
-
-    }, 800);
-
-    return () => clearInterval(interval);
-  }, [trend, activePlan]);
+  };
 
   // SVG Chart Logic
   const min = Math.min(...history);
@@ -223,11 +294,11 @@ export const TradingTerminal = ({ activePlan, onSync }) => {
           </div>
           
           <div className="flex flex-col items-end">
-             <span className="text-[10px] text-gray-500 font-mono mb-1">NEXT SYNC</span>
+             <span className="text-[10px] text-gray-500 font-mono mb-1">REPORT IN</span>
              <div className="bg-gray-800 border border-gray-600 rounded px-2 py-1 flex items-center gap-2">
                 <Clock size={12} className="text-yellow-400" />
-                <span className={`text-xs font-mono font-bold ${timeLeft < 30 ? 'text-red-400 animate-pulse' : 'text-white'}`}>
-                  {formatTime(timeLeft)}
+                <span className={`text-xs font-mono font-bold ${minuteTimeLeft < 10 ? 'text-red-400 animate-pulse' : 'text-white'}`}>
+                  {Math.floor(minuteTimeLeft)}s
                 </span>
              </div>
           </div>
@@ -238,10 +309,10 @@ export const TradingTerminal = ({ activePlan, onSync }) => {
           <div className="flex justify-between items-end mb-6">
             <div>
               <p className="text-gray-400 text-[10px] font-mono mb-1 flex items-center gap-1">
-                <Activity size={10} /> BTC/USDT (PERP)
+                <Activity size={10} /> EUR/USD (OTC)
               </p>
               <h2 className={`text-4xl font-mono font-black tracking-tighter ${history[history.length-1] > history[history.length-2] ? 'text-green-400 drop-shadow-[0_0_8px_rgba(74,222,128,0.4)]' : 'text-red-400 drop-shadow-[0_0_8px_rgba(248,113,113,0.4)]'}`}>
-                {price.toFixed(2)}
+                {price.toFixed(5)}
               </h2>
             </div>
             <div className="text-right bg-gray-800/50 p-2 rounded-lg border border-gray-700/50 backdrop-blur-sm">
@@ -287,6 +358,32 @@ export const TradingTerminal = ({ activePlan, onSync }) => {
              {/* Ping Indicador */}
              <div className={`absolute right-0 top-1/2 w-1.5 h-1.5 rounded-full ${trend === 'bull' ? 'bg-green-400 shadow-[0_0_10px_#4ade80]' : 'bg-red-400 shadow-[0_0_10px_#f87171]'} animate-ping`}></div>
           </div>
+
+          {/* Relatório do Último Minuto */}
+          {minuteReport && (
+            <div className="mb-3 bg-blue-900/20 border border-blue-500/30 rounded-lg p-2 flex justify-between items-center animate-fadeIn shadow-lg backdrop-blur-md">
+                <div className="flex flex-col">
+                    <span className="text-[9px] text-blue-300 font-bold uppercase tracking-wider">Minute Report</span>
+                    <span className="text-[9px] text-gray-400 font-mono">{minuteReport.timestamp}</span>
+                </div>
+                <div className="flex gap-4 text-xs font-mono bg-black/20 px-3 py-1 rounded-md">
+                    <div className="text-center">
+                        <span className="text-[8px] text-gray-500 block uppercase">Wins</span>
+                        <span className="text-green-400 font-bold">{minuteReport.wins}</span>
+                    </div>
+                    <div className="text-center">
+                        <span className="text-[8px] text-gray-500 block uppercase">Loss</span>
+                        <span className="text-red-400 font-bold">{minuteReport.losses}</span>
+                    </div>
+                    <div className="text-center pl-2 border-l border-gray-700">
+                        <span className="text-[8px] text-gray-500 block uppercase">Net P&L</span>
+                        <span className={`${minuteReport.profit >= 0 ? 'text-green-400' : 'text-red-400'} font-bold`}>
+                            {minuteReport.profit >= 0 ? '+' : ''}{minuteReport.profit.toFixed(2)}
+                        </span>
+                    </div>
+                </div>
+            </div>
+          )}
 
           {/* Lista de Operações (Scrollável e Responsiva) */}
           <div className="space-y-2">

@@ -21,7 +21,9 @@ import {
   CreditCard, 
   Plus, 
   Minus,
-  Cpu
+  Cpu,
+  AlertTriangle,
+  CheckCircle
 } from 'lucide-react';
 
 // Importações Refatoradas
@@ -56,7 +58,7 @@ export default function App() {
       usdt_arbitrum: '',
       usdc_arbitrum: ''
     },
-    balances: { usdt: 1000, usdc: 0, fdt: 500 }, 
+    balances: { usdt: 0, usdc: 0, fdt: 0 }, 
     activePlan: null, 
     history: [],
     notifications: [],
@@ -69,7 +71,7 @@ export default function App() {
 
   // --- EFEITOS DE INICIALIZAÇÃO E LOOP ---
   useEffect(() => {
-    const savedData = localStorage.getItem('app_mvp_data_v7'); // Bump to v7 for New HFT
+    const savedData = localStorage.getItem('app_mvp_data_v8'); // Bump to v8 for Zero Balance
     if (savedData) {
       const parsed = JSON.parse(savedData);
       
@@ -98,8 +100,8 @@ export default function App() {
         const lastTime = parsed.lastLogin || now;
         const diffSeconds = (now - lastTime) / 1000;
         
-        // Se ficou mais de 5 min fora, calcula um lucro médio
-        if (diffSeconds > 300) {
+        // Se ficou mais de 1 min fora, calcula um lucro médio
+        if (diffSeconds > 60) {
             const plan = PLANS.find(p => p.id === parsed.activePlan.planId);
             if (plan) {
               const dailyRoi = plan.roiTotal / plan.duration; 
@@ -135,7 +137,7 @@ export default function App() {
 
   useEffect(() => {
     if (!loading) {
-      localStorage.setItem('app_mvp_data_v7', JSON.stringify({ ...user, lang }));
+      localStorage.setItem('app_mvp_data_v8', JSON.stringify({ ...user, lang }));
     }
   }, [user, lang, loading]);
 
@@ -155,7 +157,8 @@ export default function App() {
 
          triggerNotification(
              'Rede', 
-             `Bônus ${type} Nível ${networkLevel.level}: +$${amount}`
+             `Bônus ${type} Nível ${networkLevel.level}: +$${amount}`,
+             'success'
          );
          
          setUser(prev => ({
@@ -176,14 +179,14 @@ export default function App() {
 
   // --- FUNÇÕES AUXILIARES ---
 
-  const triggerNotification = (title, msg) => {
-    const newNotif = { id: Date.now(), title, msg, read: false, time: new Date().toLocaleTimeString() };
+  const triggerNotification = (title, msg, type = 'info') => {
+    const newNotif = { id: Date.now(), title, msg, read: false, time: new Date().toLocaleTimeString(), type };
     setUser(prev => ({
       ...prev,
       notifications: [newNotif, ...prev.notifications]
     }));
-    setToast(msg);
-    setTimeout(() => setToast(null), 3000);
+    setToast({ title, msg, type });
+    setTimeout(() => setToast(null), 4000);
   };
 
   const formatCurrency = (val) => {
@@ -194,31 +197,47 @@ export default function App() {
     return `${Math.floor(val).toLocaleString()} FDT`;
   };
 
-  // --- SYNC HFT (A cada 5 min) ---
+  // --- SYNC HFT (A cada 1 min) ---
   const handleHftSync = (profit, opsCount) => {
-     if (profit <= 0 && opsCount === 0) return;
+     if (profit === 0 && opsCount === 0) return;
 
-     setUser(prev => ({
-         ...prev,
-         activePlan: {
-             ...prev.activePlan,
-             accumulated: (prev.activePlan?.accumulated || 0) + profit
-         },
-         // Opcional: Adicionar ao histórico financeiro se quiser detalhar cada ciclo
-         history: [
-             { 
-                 type: 'hft_profit', 
-                 amount: profit.toFixed(4), 
-                 date: new Date().toLocaleTimeString(), 
-                 desc: `Ciclo 5min (${opsCount} ops)` 
-             }, 
-             ...prev.history
-         ]
-     }));
+     const now = new Date();
+     const timeString = now.toLocaleTimeString();
 
+     setUser(prev => {
+         // Evitar duplicidade de registros no mesmo segundo (React StrictMode ou Timer Glitch)
+         const lastEntry = prev.history[0];
+         if (lastEntry && 
+             lastEntry.type === 'hft_profit' && 
+             lastEntry.date === timeString &&
+             lastEntry.amount === profit.toFixed(4)) {
+             return prev;
+         }
+
+         return {
+            ...prev,
+            activePlan: {
+                ...prev.activePlan,
+                accumulated: (prev.activePlan?.accumulated || 0) + profit
+            },
+            history: [
+                { 
+                    id: Date.now(),
+                    type: 'hft_profit', 
+                    amount: profit.toFixed(4), 
+                    date: timeString, 
+                    desc: `Ciclo 1min (${opsCount} ops)` 
+                }, 
+                ...prev.history
+            ]
+         };
+     });
+
+     const sign = profit >= 0 ? '+' : '';
      triggerNotification(
          'HFT Report', 
-         `Ciclo finalizado: ${opsCount} operações. Lucro: +$${profit.toFixed(4)} creditado.`
+         `Ciclo finalizado: ${opsCount} operações. Lucro: ${sign}$${profit.toFixed(4)}`,
+         profit >= 0 ? 'success' : 'error'
      );
   };
 
@@ -228,7 +247,7 @@ export default function App() {
     const amount = customAmount || plan.min;
     
     if (user.balances.usdt < amount) {
-      triggerNotification('Erro', 'Saldo USDT insuficiente.');
+      triggerNotification('Erro', 'Saldo USDT insuficiente.', 'error');
       return;
     }
 
@@ -249,7 +268,7 @@ export default function App() {
                 desc: `Upgrade ${plan.name} (Total: $${(prev.activePlan.amount + amount).toFixed(2)})` 
             }, ...prev.history]
         }));
-        triggerNotification('Sucesso', `Upgrade realizado! Novo capital: $${(user.activePlan.amount + amount).toFixed(2)}`);
+        triggerNotification('Sucesso', `Upgrade realizado! Novo capital: $${(user.activePlan.amount + amount).toFixed(2)}`, 'success');
     } else {
         // NEW ACTIVATION
         setUser(prev => ({
@@ -263,14 +282,14 @@ export default function App() {
             },
             history: [{ type: 'plan_activation', amount: amount, date: new Date().toLocaleTimeString(), desc: plan.name }, ...prev.history]
         }));
-        triggerNotification('Sucesso', `${plan.name} ativado com $${amount}!`);
+        triggerNotification('Sucesso', `${plan.name} ativado com $${amount}!`, 'success');
     }
     setView('home');
   };
 
   const handleGamePlay = () => {
     if (user.balances.fdt < CONFIG.gameCost) {
-      triggerNotification('Game', 'FDT Insuficiente.');
+      triggerNotification('Game', 'FDT Insuficiente.', 'error');
       return;
     }
 
@@ -282,8 +301,8 @@ export default function App() {
       balances: { ...prev.balances, fdt: prev.balances.fdt - CONFIG.gameCost + reward }
     }));
 
-    if (win) triggerNotification('Game', `${t.win} ${CONFIG.gameCost * 2} FDT!`);
-    else triggerNotification('Game', t.lose);
+    if (win) triggerNotification('Game', `${t.win} ${CONFIG.gameCost * 2} FDT!`, 'success');
+    else triggerNotification('Game', t.lose, 'error');
   };
 
   const handleVaultResult = (win, amount) => {
@@ -326,8 +345,8 @@ export default function App() {
       };
     });
 
-    if (win) triggerNotification('Vault Hacker', `SYSTEM HACKED! +${amount} FDT`);
-    else triggerNotification('Vault Hacker', `ACCESS DENIED! -${amount} FDT`);
+    if (win) triggerNotification('Vault Hacker', `SYSTEM HACKED! +${amount} FDT`, 'success');
+    else triggerNotification('Vault Hacker', `ACCESS DENIED! -${amount} FDT`, 'error');
   };
 
   const handleQuantumGameOver = (score, sparks) => {
@@ -349,13 +368,13 @@ export default function App() {
       };
     });
     
-    if (sparks > 0) triggerNotification('Quantum Dash', `Coletou ${sparks} Sparks!`);
+    if (sparks > 0) triggerNotification('Quantum Dash', `Coletou ${sparks} Sparks!`, 'success');
   };
 
   const handleBuyCredits = () => {
     const COST = 50; // 50 FDT por recarga
     if (user.balances.fdt < COST) {
-       triggerNotification('Loja', 'Saldo FDT insuficiente (Req: 50 FDT)');
+       triggerNotification('Loja', 'Saldo FDT insuficiente (Req: 50 FDT)', 'error');
        return;
     }
     
@@ -364,7 +383,7 @@ export default function App() {
        balances: { ...prev.balances, fdt: prev.balances.fdt - COST },
        gameCredits: { ...prev.gameCredits, daily: 3 } // Recarga full
     }));
-    triggerNotification('Loja', 'Energia recarregada com sucesso!');
+    triggerNotification('Loja', 'Energia recarregada com sucesso!', 'success');
   };
 
   const handleSaveSettings = (formData) => {
@@ -374,14 +393,14 @@ export default function App() {
       wallets: { ...prev.wallets, ...formData.wallets },
       photoUrl: formData.photoUrl || prev.photoUrl
     }));
-    triggerNotification('Configurações', 'Dados atualizados com sucesso!');
+    triggerNotification('Configurações', 'Dados atualizados com sucesso!', 'success');
   };
 
   // --- FUNÇÕES DA CARTEIRA ---
   const handleDepositAction = (asset, network, amount) => {
     const numAmount = Number(amount);
     if (!numAmount || numAmount < CONFIG.minTransaction) {
-      triggerNotification('Erro', `Depósito mínimo de $${CONFIG.minTransaction}`);
+      triggerNotification('Erro', `Depósito mínimo de $${CONFIG.minTransaction}`, 'error');
       return;
     }
     
@@ -391,17 +410,17 @@ export default function App() {
       balances: { ...prev.balances, [asset]: prev.balances[asset] + numAmount },
       history: [{ type: 'deposit', amount: numAmount, date: new Date().toLocaleTimeString(), desc: `${asset.toUpperCase()} (${network})` }, ...prev.history]
     }));
-    triggerNotification('Sucesso', `Depósito de ${numAmount} ${asset.toUpperCase()} recebido!`);
+    triggerNotification('Sucesso', `Depósito de ${numAmount} ${asset.toUpperCase()} recebido!`, 'success');
   };
 
   const handleWithdrawAction = (asset, amount) => {
     const numAmount = Number(amount);
     if (!numAmount || numAmount < CONFIG.minTransaction) {
-      triggerNotification('Erro', `Saque mínimo de $${CONFIG.minTransaction}`);
+      triggerNotification('Erro', `Saque mínimo de $${CONFIG.minTransaction}`, 'error');
       return;
     }
     if (user.balances[asset] < numAmount) {
-      triggerNotification('Erro', `Saldo insuficiente.`);
+      triggerNotification('Erro', `Saldo insuficiente.`, 'error');
       return;
     }
 
@@ -410,7 +429,7 @@ export default function App() {
       balances: { ...prev.balances, [asset]: prev.balances[asset] - numAmount },
       history: [{ type: 'withdraw', amount: numAmount, date: new Date().toLocaleTimeString(), desc: `${asset.toUpperCase()} Pending` }, ...prev.history]
     }));
-    triggerNotification('Sucesso', 'Solicitação de saque enviada!');
+    triggerNotification('Sucesso', 'Solicitação de saque enviada!', 'success');
   };
 
   const handleSwapAction = (amount, direction = 'fdtToUsd') => {
@@ -421,7 +440,7 @@ export default function App() {
 
     if (direction === 'fdtToUsd') {
       if (user.balances.fdt < numAmount) {
-        triggerNotification('Erro', 'Saldo FDT insuficiente.');
+        triggerNotification('Erro', 'Saldo FDT insuficiente.', 'error');
         return;
       }
 
@@ -436,12 +455,12 @@ export default function App() {
         },
         history: [{ type: 'swap', amount: usdAmount, date: new Date().toLocaleTimeString(), desc: `${numAmount} FDT -> USD` }, ...prev.history]
       }));
-      triggerNotification('Sucesso', `Troca realizada: +$${usdAmount.toFixed(2)}`);
+      triggerNotification('Sucesso', `Troca realizada: +$${usdAmount.toFixed(2)}`, 'success');
       return;
     }
 
     if (user.balances.usdt < numAmount) {
-      triggerNotification('Erro', 'Saldo USDT insuficiente.');
+      triggerNotification('Erro', 'Saldo USDT insuficiente.', 'error');
       return;
     }
 
@@ -456,7 +475,7 @@ export default function App() {
       },
       history: [{ type: 'swap', amount: fdtAmount, date: new Date().toLocaleTimeString(), desc: `$${numAmount.toFixed(2)} USD -> ${fdtAmount} FDT` }, ...prev.history]
     }));
-    triggerNotification('Sucesso', `Troca realizada: +${fdtAmount} FDT`);
+    triggerNotification('Sucesso', `Troca realizada: +${fdtAmount} FDT`, 'success');
   };
 
 
@@ -847,6 +866,31 @@ export default function App() {
             </div>
         </div>
 
+        {/* Zona de Perigo - Reset de Dados */}
+        <div className="bg-red-900/10 p-5 rounded-xl border border-red-900/30 mb-6">
+            <div className="flex items-center gap-2 mb-4 border-b border-red-900/30 pb-2">
+                <LogOut size={18} className="text-red-500" />
+                <h3 className="text-white font-bold">Zona de Perigo</h3>
+            </div>
+            
+            <p className="text-xs text-gray-400 mb-4">
+                Deseja reiniciar a aplicação? Isso apagará todo o histórico, saldo simulado e configurações locais.
+            </p>
+
+            <button 
+                onClick={() => {
+                    if (window.confirm('TEM CERTEZA? Isso apagará todos os dados e reiniciará a aplicação para o estado inicial.')) {
+                        localStorage.removeItem('app_mvp_data_v8');
+                        localStorage.removeItem('hft_cycle_state_v2');
+                        window.location.reload();
+                    }
+                }}
+                className="w-full bg-red-600/20 hover:bg-red-600/30 text-red-400 font-bold py-3 rounded-lg border border-red-600/50 transition flex items-center justify-center gap-2"
+            >
+                <LogOut size={16} /> Resetar Dados
+            </button>
+        </div>
+
         <button 
             onClick={handleSave}
             className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-xl shadow-lg border-b-4 border-blue-800 active:border-b-0 active:mt-1 transition-all flex items-center justify-center gap-2"
@@ -978,7 +1022,7 @@ export default function App() {
           >
             <Zap size={32} className="fill-current" />
           </button>
-          <span className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 text-[10px] font-bold text-blue-400">BOTS</span>
+          <span className="absolute -bottom-4 left-1/2 transform -translate-x-1/2 text-[10px] font-bold text-blue-400">BOTS</span>
         </div>
 
         <NavBtn icon={Wallet} id="wallet" label="Wallet" active={view === 'wallet'} />
@@ -1014,8 +1058,13 @@ export default function App() {
           from { transform: translateX(-20px); opacity: 0; }
           to { transform: translateX(0); opacity: 1; }
         }
+        @keyframes slideDown {
+          from { transform: translateY(-20px); opacity: 0; }
+          to { transform: translateY(0); opacity: 1; }
+        }
         .animate-scan { animation: scan 3s linear infinite; }
         .animate-slideUp { animation: slideUp 0.3s ease-out; }
+        .animate-slideDown { animation: slideDown 0.3s ease-out; }
         .animate-slideInLeft { animation: slideInLeft 0.3s ease-out; }
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #374151; border-radius: 4px; }
@@ -1038,7 +1087,7 @@ export default function App() {
           />
         )}
         
-        {view === 'plans' && <PlansView t={t} handleActivatePlan={handleActivatePlan} userBalance={user.balances.usdt} />}
+        {view === 'plans' && <PlansView t={t} handleActivatePlan={handleActivatePlan} user={user} userBalance={user.balances.usdt} />}
         
         {view === 'wallet' && (
           <WalletView 
@@ -1064,8 +1113,66 @@ export default function App() {
 
       {/* Toast Notification */}
       {toast && (
-        <div className="fixed top-20 left-1/2 transform -translate-x-1/2 bg-gray-800 border border-yellow-400 text-yellow-400 px-4 py-2 rounded-full shadow-lg z-[70] text-sm font-bold flex items-center gap-2 animate-bounce">
-          <Zap size={14} /> {toast}
+        <div className="fixed top-6 left-1/2 transform -translate-x-1/2 z-[70] animate-slideDown w-[90%] max-w-sm pointer-events-none">
+           {(() => {
+              const type = toast.type || 'info';
+              const styles = {
+                success: {
+                    bg: 'bg-green-950/95 border-green-500/40 shadow-[0_0_30px_rgba(34,197,94,0.2)]',
+                    iconBg: 'bg-green-500/20 border-green-500/30',
+                    iconColor: 'text-green-400',
+                    titleColor: 'text-green-400',
+                    dotColor: 'bg-green-400 shadow-[0_0_8px_#4ade80]',
+                    label: toast.title || 'PROFIT REPORT',
+                    Icon: TrendingUp
+                },
+                error: {
+                    bg: 'bg-red-950/95 border-red-500/40 shadow-[0_0_30px_rgba(239,68,68,0.2)]',
+                    iconBg: 'bg-red-500/20 border-red-500/30',
+                    iconColor: 'text-red-400',
+                    titleColor: 'text-red-400',
+                    dotColor: 'bg-red-400 shadow-[0_0_8px_#f87171]',
+                    label: toast.title || 'SYSTEM ALERT',
+                    Icon: AlertTriangle
+                },
+                info: {
+                    bg: 'bg-gray-900/95 border-blue-500/40 shadow-[0_0_30px_rgba(37,99,235,0.2)]',
+                    iconBg: 'bg-blue-500/20 border-blue-500/30',
+                    iconColor: 'text-blue-400',
+                    titleColor: 'text-blue-400',
+                    dotColor: 'bg-blue-400 shadow-[0_0_8px_#60a5fa]',
+                    label: toast.title || 'SYSTEM UPDATE',
+                    Icon: Zap
+                }
+              }[type] || {
+                    bg: 'bg-gray-900/95 border-blue-500/40 shadow-[0_0_30px_rgba(37,99,235,0.2)]',
+                    iconBg: 'bg-blue-500/20 border-blue-500/30',
+                    iconColor: 'text-blue-400',
+                    titleColor: 'text-blue-400',
+                    dotColor: 'bg-blue-400 shadow-[0_0_8px_#60a5fa]',
+                    label: toast.title || 'SYSTEM UPDATE',
+                    Icon: Zap
+              };
+
+              const { Icon } = styles;
+
+              return (
+                <div className={`${styles.bg} backdrop-blur-xl border px-5 py-4 rounded-2xl flex items-center gap-4 transition-all duration-300 pointer-events-auto`}>
+                  <div className={`shrink-0 w-12 h-12 rounded-full ${styles.iconBg} flex items-center justify-center border shadow-inner`}>
+                     <Icon size={24} className={styles.iconColor} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                     <p className={`text-[10px] ${styles.titleColor} font-bold uppercase tracking-widest mb-1 flex items-center gap-2`}>
+                        <span className={`w-2 h-2 ${styles.dotColor} rounded-full animate-pulse`}></span>
+                        {styles.label}
+                     </p>
+                     <p className="text-sm font-medium text-white leading-tight break-words drop-shadow-sm">
+                        {toast.msg}
+                     </p>
+                  </div>
+                </div>
+              );
+           })()}
         </div>
       )}
     </div>

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { PLANS } from '../data/config';
 import { X, Check, AlertCircle, Wallet } from 'lucide-react';
 
-export const PlansView = ({ t, handleActivatePlan, userBalance }) => {
+export const PlansView = ({ t, handleActivatePlan, userBalance, user }) => {
   const [selectedPlan, setSelectedPlan] = useState(null);
   const [amount, setAmount] = useState('');
 
@@ -27,11 +27,36 @@ export const PlansView = ({ t, handleActivatePlan, userBalance }) => {
     closeModal();
   };
 
+  // Cálculo dos saldos
+  const saldoRestante = userBalance || 0;
+  const saldoAplicado = user?.activePlan ? parseFloat(user.activePlan.amount) : 0;
+  const saldoTotal = saldoRestante + saldoAplicado;
+
   return (
     <div className="px-4 pb-24 space-y-4 animate-fadeIn relative">
-      <div className="flex items-center gap-2 mb-6">
+      <div className="flex items-center gap-2 mb-2">
          <h2 className="text-2xl font-bold text-white">Select Bot Strategy</h2>
          <span className="text-xs bg-blue-900 text-blue-300 px-2 py-1 rounded border border-blue-700">AI TRADING</span>
+      </div>
+
+      {/* Container de Saldos - Solicitado pelo usuário */}
+      <div className="grid grid-cols-3 bg-gray-900 rounded-xl border border-gray-800 p-4 mb-6 shadow-lg relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-600 via-purple-600 to-green-600 opacity-50"></div>
+          
+          <div className="flex flex-col items-center justify-center border-r border-gray-800 pr-2">
+              <span className="text-[10px] text-gray-400 uppercase tracking-wider mb-1">Total</span>
+              <span className="text-white font-bold text-sm sm:text-base">${saldoTotal.toFixed(2)}</span>
+          </div>
+
+          <div className="flex flex-col items-center justify-center border-r border-gray-800 px-2">
+              <span className="text-[10px] text-gray-400 uppercase tracking-wider mb-1">Restante</span>
+              <span className="text-blue-400 font-bold text-sm sm:text-base">${saldoRestante.toFixed(2)}</span>
+          </div>
+
+          <div className="flex flex-col items-center justify-center pl-2">
+              <span className="text-[10px] text-gray-400 uppercase tracking-wider mb-1">Aplicado</span>
+              <span className="text-green-400 font-bold text-sm sm:text-base">${saldoAplicado.toFixed(2)}</span>
+          </div>
       </div>
       
       {PLANS.map(plan => (
@@ -58,9 +83,11 @@ export const PlansView = ({ t, handleActivatePlan, userBalance }) => {
             </div>
           </div>
 
-          <p className="text-gray-400 text-xs mt-2 mb-3 leading-relaxed border-b border-gray-700/50 pb-2">
-            {plan.desc}
-          </p>
+          {plan.desc && (
+            <p className="text-gray-400 text-xs mt-2 mb-3 leading-relaxed border-b border-gray-700/50 pb-2">
+              {plan.desc}
+            </p>
+          )}
 
           <div className="flex justify-between items-end">
             <div>
