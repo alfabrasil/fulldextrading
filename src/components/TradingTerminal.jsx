@@ -188,7 +188,7 @@ export const TradingTerminal = ({ activePlan, onSync }) => {
             type = 'STOCK';
         }
 
-        const dailyRoiPercent = activePlan.roiTotal / activePlan.duration;
+        const dailyRoiPercent = activePlan.roiUser / activePlan.duration;
         const targetDailyProfit = activePlan.amount * (dailyRoiPercent / 100);
         const targetMinuteProfit = targetDailyProfit / 1440; 
         

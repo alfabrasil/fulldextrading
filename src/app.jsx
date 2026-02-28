@@ -104,7 +104,7 @@ export default function App() {
         if (diffSeconds > 60) {
             const plan = PLANS.find(p => p.id === parsed.activePlan.planId);
             if (plan) {
-              const dailyRoi = plan.roiTotal / plan.duration; 
+              const dailyRoi = plan.roiUser / plan.duration; 
               const dailyProfit = parsed.activePlan.amount * (dailyRoi / 100);
               const offlineProfit = dailyProfit * (diffSeconds / 86400);
               

@@ -27,7 +27,9 @@ export const PLANS = [
     name: 'Quantum Pulse AI', 
     flag: '🇺🇸', 
     profile: 'Estratégia Dinâmica',
-    note: '📉 3% de taxa performance',
+    // note: '📉 3% de taxa performance', // Removido
+    roiBot: 10, // 10%
+    roiUser: 40, // 40%
     min: 10,
     max: 1000, 
     roiTotal: 50, 
@@ -38,10 +40,12 @@ export const PLANS = [
   { 
     id: 'alpha_trend', 
     name: 'Alpha Trend Pro', 
-    flag: '🇺🇸',
+    flag: '🇺🇸', 
     profile: 'Estratégia Arrojada',
     desc: '150% Lucro, Capital + Lucro Disponível.',
-    note: '📉 3% de taxa performance',
+    // note: '📉 3% de taxa performance', // Removido
+    roiBot: 20, // 20%
+    roiUser: 130, // 130%
     min: 10,
     max: 5000, 
     roiTotal: 150, 
@@ -53,7 +57,9 @@ export const PLANS = [
     name: 'Binary Storm X', 
     flag: '🇺🇸',
     profile: 'Estratégia Moderada',
-    note: '📉 3% de taxa performance',
+    // note: '📉 3% de taxa performance', // Removido
+    roiBot: 30, // 30%
+    roiUser: 270, // 270%
     min: 10,
     max: 10000, 
     roiTotal: 300, 

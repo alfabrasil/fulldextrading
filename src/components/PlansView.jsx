@@ -106,10 +106,13 @@ export const PlansView = ({ t, handleActivatePlan, userBalance, user }) => {
             </div>
           </div>
 
-          <div className="mt-3 pt-2 border-t border-gray-700/50">
-             <p className="text-[10px] text-yellow-500/80 flex items-center gap-1">
-               {plan.note}
-             </p>
+          <div className="mt-3 pt-2 border-t border-gray-700/50 flex justify-between items-center text-[10px]">
+             <span className="text-green-400 font-bold bg-green-900/20 px-1.5 py-0.5 rounded border border-green-700/50">
+                USUÁRIO: {plan.roiUser}%
+             </span>
+             <span className="text-blue-400 font-bold bg-blue-900/20 px-1.5 py-0.5 rounded border border-blue-700/50">
+                ROBÔ: {plan.roiBot}%
+             </span>
           </div>
 
           <div className="mt-3 flex items-center justify-between group-hover:opacity-100 transition-opacity">
@@ -170,16 +173,29 @@ export const PlansView = ({ t, handleActivatePlan, userBalance, user }) => {
                     </div>
 
                     <div className="bg-gray-800/50 p-4 rounded-xl border border-gray-700/50 space-y-2">
-                        <div className="flex justify-between text-sm">
-                            <span className="text-gray-400">ROI Estimado ({selectedPlan.roiTotal}%)</span>
-                            <span className="text-green-400 font-bold">
+                        <div className="flex justify-between text-sm border-b border-gray-700/50 pb-2 mb-2">
+                            <span className="text-gray-400">Lucro Bruto ({selectedPlan.roiTotal}%)</span>
+                            <span className="text-gray-300 font-bold">
                                 +${((parseFloat(amount) || 0) * (selectedPlan.roiTotal/100)).toFixed(2)}
                             </span>
                         </div>
+                        
+                        <div className="flex justify-between text-xs text-blue-400">
+                            <span>Taxa Robô ({selectedPlan.roiBot}%)</span>
+                            <span>-${((parseFloat(amount) || 0) * (selectedPlan.roiBot/100)).toFixed(2)}</span>
+                        </div>
+
+                        <div className="flex justify-between text-sm">
+                            <span className="text-gray-400">Lucro Usuário ({selectedPlan.roiUser}%)</span>
+                            <span className="text-green-400 font-bold">
+                                +${((parseFloat(amount) || 0) * (selectedPlan.roiUser/100)).toFixed(2)}
+                            </span>
+                        </div>
+
                         <div className="flex justify-between text-sm pt-2 border-t border-gray-700/50">
-                            <span className="text-gray-300 font-bold">Total Final</span>
+                            <span className="text-gray-300 font-bold">Total Final (Capital + Lucro)</span>
                             <span className="text-white font-black">
-                                ${((parseFloat(amount) || 0) * (1 + selectedPlan.roiTotal/100)).toFixed(2)}
+                                ${((parseFloat(amount) || 0) * (1 + selectedPlan.roiUser/100)).toFixed(2)}
                             </span>
                         </div>
                     </div>
