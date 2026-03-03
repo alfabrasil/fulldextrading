@@ -123,18 +123,18 @@ export const GameView = ({ t, user, handleGamePlay, handleQuantumGameOver, handl
       </div>
 
       {/* Game Grid */}
-      <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-4">
         {games.map(game => (
-           <div key={game.id} className={`bg-gray-800 rounded-xl overflow-hidden border-l-4 ${game.color} relative group transition-all hover:scale-[1.02]`}>
-              <div className="p-5 flex justify-between items-start relative z-10">
-                 <div className="flex gap-4">
-                    <div className={`w-14 h-14 rounded-lg ${game.bg} flex items-center justify-center border border-white/5`}>
+           <div key={game.id} className={`bg-gray-800 rounded-xl overflow-hidden border-l-4 ${game.color} relative group transition-all hover:scale-[1.02] flex flex-col h-full`}>
+              <div className="p-5 flex-1 relative z-10">
+                 <div className="flex gap-4 items-start">
+                    <div className={`shrink-0 w-14 h-14 rounded-lg ${game.bg} flex items-center justify-center border border-white/5`}>
                        {game.icon}
                     </div>
-                    <div>
-                       <h3 className="text-white font-black text-lg italic tracking-wider">{game.name}</h3>
-                       <p className="text-gray-400 text-xs max-w-[180px] leading-relaxed mb-2">{game.desc}</p>
-                       <span className="text-[10px] bg-gray-900 px-2 py-1 rounded text-gray-300 border border-gray-700 font-mono">
+                    <div className="min-w-0">
+                       <h3 className="text-white font-black text-lg italic tracking-wider truncate">{game.name}</h3>
+                       <p className="text-gray-400 text-xs leading-relaxed mb-3 line-clamp-2">{game.desc}</p>
+                       <span className="inline-block text-[10px] bg-gray-900 px-2 py-1 rounded text-gray-300 border border-gray-700 font-mono">
                           COST: <span className="text-white font-bold">{game.cost}</span>
                        </span>
                     </div>
@@ -142,10 +142,10 @@ export const GameView = ({ t, user, handleGamePlay, handleQuantumGameOver, handl
               </div>
               
               {/* Play Button Overlay */}
-              <div className="bg-gray-900/50 p-3 flex justify-end border-t border-gray-700/50">
+              <div className="bg-gray-900/50 p-3 flex justify-end border-t border-gray-700/50 mt-auto relative z-20">
                  <button 
                    onClick={game.action}
-                   className="bg-white text-gray-900 font-bold text-sm px-6 py-2 rounded-full shadow-lg hover:bg-gray-200 transition flex items-center gap-1"
+                   className="bg-white text-gray-900 font-bold text-sm px-6 py-2 rounded-full shadow-lg hover:bg-gray-200 transition flex items-center gap-1 active:scale-95"
                  >
                    JOGAR <Play size={12} fill="currentColor" />
                  </button>

@@ -23,7 +23,8 @@ import {
   Minus,
   Cpu,
   AlertTriangle,
-  CheckCircle
+  CheckCircle,
+  X
 } from 'lucide-react';
 
 // Importações Refatoradas
@@ -482,7 +483,7 @@ export default function App() {
   // --- SUB-COMPONENTES (Renderização) ---
 
   const Header = () => (
-    <div className="flex justify-between items-center p-4 bg-gray-900 border-b border-gray-800 sticky top-0 z-50">
+    <div className="flex justify-between items-center p-4 bg-gray-900 border-b border-gray-800 shrink-0 z-50">
       <div className="flex items-center gap-2">
         <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-500 to-cyan-400 flex items-center justify-center shadow-[0_0_10px_#3b82f6] overflow-hidden">
           {user.photoUrl ? (
@@ -651,25 +652,49 @@ export default function App() {
   );
 
   const NotificationsPanel = () => (
-    <div className={`fixed inset-y-0 right-0 w-80 bg-gray-900 shadow-2xl z-[60] transform transition-transform duration-300 border-l border-gray-700 ${showNotif ? 'translate-x-0' : 'translate-x-full'}`}>
-      <div className="p-4 border-b border-gray-800 flex justify-between items-center">
-        <h3 className="text-white font-bold">{t.notifications}</h3>
-        <button onClick={() => setShowNotif(false)} className="text-gray-400 hover:text-white"><Minus size={20} className="rotate-45" /></button>
-      </div>
-      <div className="p-4 space-y-3 h-full overflow-y-auto pb-20">
-        {user.notifications.length === 0 ? (
-          <p className="text-gray-500 text-center mt-10">Tudo limpo por aqui.</p>
-        ) : (
-          user.notifications.map(n => (
-            <div key={n.id} className="bg-gray-800 p-3 rounded-lg border-l-4 border-blue-500">
-              <h4 className="text-gray-200 text-sm font-bold">{n.title}</h4>
-              <p className="text-gray-400 text-xs mt-1">{n.msg}</p>
-              <span className="text-gray-600 text-[10px] mt-2 block text-right">{n.time}</span>
+    <>
+      {/* Overlay Backdrop */}
+      {showNotif && (
+        <div 
+          className="absolute inset-0 bg-black/50 backdrop-blur-sm z-[55] animate-fadeIn"
+          onClick={() => setShowNotif(false)}
+        ></div>
+      )}
+      
+      {/* Panel */}
+      <div className={`absolute inset-y-0 right-0 w-full bg-gray-900 shadow-2xl z-[60] transform transition-transform duration-300 border-l border-gray-700 ${showNotif ? 'translate-x-0' : 'translate-x-full'}`}>
+        <div className="p-4 border-b border-gray-800 flex justify-between items-center bg-gray-900">
+          <h3 className="text-white font-bold flex items-center gap-2">
+             <Bell size={16} className="text-blue-400" /> 
+             {t.notifications}
+          </h3>
+          <button 
+            onClick={() => setShowNotif(false)} 
+            className="w-8 h-8 flex items-center justify-center bg-gray-800 rounded-full text-gray-400 hover:text-white hover:bg-gray-700 transition"
+          >
+            <X size={18} />
+          </button>
+        </div>
+        <div className="p-4 space-y-3 h-[calc(100%-60px)] overflow-y-auto custom-scrollbar pb-20">
+          {user.notifications.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full text-gray-500 gap-2">
+               <Bell size={32} className="opacity-20" />
+               <p className="text-xs">Tudo limpo por aqui.</p>
             </div>
-          ))
-        )}
+          ) : (
+            user.notifications.map(n => (
+              <div key={n.id} className={`bg-gray-800/50 p-3 rounded-lg border-l-4 ${n.type === 'error' ? 'border-red-500' : n.type === 'success' ? 'border-green-500' : 'border-blue-500'} hover:bg-gray-800 transition`}>
+                <div className="flex justify-between items-start mb-1">
+                   <h4 className="text-gray-200 text-sm font-bold">{n.title}</h4>
+                   <span className="text-[10px] text-gray-500">{n.time}</span>
+                </div>
+                <p className="text-gray-400 text-xs leading-relaxed">{n.msg}</p>
+              </div>
+            ))
+          )}
+        </div>
       </div>
-    </div>
+    </>
   );
 
   const MenuView = () => (
@@ -1009,7 +1034,7 @@ export default function App() {
   );
 
   const BottomNav = () => (
-    <div className="fixed bottom-0 left-0 right-0 bg-gray-900/95 backdrop-blur-md border-t border-gray-800 p-2 z-40">
+    <div className="w-full bg-gray-900/95 backdrop-blur-md border-t border-gray-800 p-2 z-40 pb-safe shrink-0">
       <div className="flex justify-around items-center">
         <NavBtn icon={TrendingUp} id="home" label="Home" active={view === 'home'} />
         <NavBtn icon={Gamepad2} id="game" label="Game" active={view === 'game'} />
@@ -1044,7 +1069,7 @@ export default function App() {
   if (loading) return <div className="min-h-screen bg-black flex items-center justify-center text-blue-500 font-mono">INITIALIZING SYSTEM...</div>;
 
   return (
-    <div className="min-h-screen bg-black text-gray-100 font-sans selection:bg-blue-500/30 overflow-hidden relative">
+    <div className="min-h-screen bg-black text-gray-100 font-sans selection:bg-blue-500/30 overflow-hidden flex justify-center">
       <style>{`
         @keyframes scan {
           0% { transform: translateY(-100%); }
@@ -1070,111 +1095,113 @@ export default function App() {
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #374151; border-radius: 4px; }
       `}</style>
       
-      <Header />
-      
-      <main className="max-w-md mx-auto h-[calc(100vh-64px)] overflow-y-auto custom-scrollbar relative">
-        {view === 'home' && <HomeView />}
+      <div className="w-full md:max-w-md bg-black relative shadow-2xl min-h-screen flex flex-col border-x border-gray-900 overflow-hidden">
+        <Header />
         
-        {view === 'game' && (
-          <GameView 
-            t={t} 
-            user={user} 
-            handleGamePlay={handleGamePlay} 
-            handleQuantumGameOver={handleQuantumGameOver}
-            handleVaultResult={handleVaultResult}
-            handleBuyCredits={handleBuyCredits}
-            formatFDT={formatFDT}
-          />
+        <main className="flex-1 w-full overflow-y-auto custom-scrollbar relative">
+            {view === 'home' && <HomeView />}
+            
+            {view === 'game' && (
+            <GameView 
+                t={t} 
+                user={user} 
+                handleGamePlay={handleGamePlay} 
+                handleQuantumGameOver={handleQuantumGameOver}
+                handleVaultResult={handleVaultResult}
+                handleBuyCredits={handleBuyCredits}
+                formatFDT={formatFDT}
+            />
+            )}
+            
+            {view === 'plans' && <PlansView t={t} handleActivatePlan={handleActivatePlan} user={user} userBalance={user.balances.usdt} />}
+            
+            {view === 'wallet' && (
+            <WalletView 
+                t={t} 
+                user={user} 
+                formatCurrency={formatCurrency} 
+                formatFDT={formatFDT}
+                handleDepositAction={handleDepositAction} 
+                handleWithdrawAction={handleWithdrawAction} 
+                handleSwapAction={handleSwapAction} 
+            />
+            )}
+            
+            {view === 'menu' && <MenuView />}
+            {view === 'team' && <TeamView />}
+            {view === 'reports' && <ReportsView />}
+            {view === 'support' && <SupportView />}
+            {view === 'settings' && <SettingsView />}
+        </main>
+
+        <BottomNav />
+        <NotificationsPanel />
+
+        {/* Toast Notification */}
+        {toast && (
+            <div className="absolute top-6 left-1/2 transform -translate-x-1/2 z-[70] animate-slideDown w-[90%] max-w-sm pointer-events-none">
+            {(() => {
+                const type = toast.type || 'info';
+                const styles = {
+                    success: {
+                        bg: 'bg-green-950/95 border-green-500/40 shadow-[0_0_30px_rgba(34,197,94,0.2)]',
+                        iconBg: 'bg-green-500/20 border-green-500/30',
+                        iconColor: 'text-green-400',
+                        titleColor: 'text-green-400',
+                        dotColor: 'bg-green-400 shadow-[0_0_8px_#4ade80]',
+                        label: toast.title || 'PROFIT REPORT',
+                        Icon: TrendingUp
+                    },
+                    error: {
+                        bg: 'bg-red-950/95 border-red-500/40 shadow-[0_0_30px_rgba(239,68,68,0.2)]',
+                        iconBg: 'bg-red-500/20 border-red-500/30',
+                        iconColor: 'text-red-400',
+                        titleColor: 'text-red-400',
+                        dotColor: 'bg-red-400 shadow-[0_0_8px_#f87171]',
+                        label: toast.title || 'SYSTEM ALERT',
+                        Icon: AlertTriangle
+                    },
+                    info: {
+                        bg: 'bg-gray-900/95 border-blue-500/40 shadow-[0_0_30px_rgba(37,99,235,0.2)]',
+                        iconBg: 'bg-blue-500/20 border-blue-500/30',
+                        iconColor: 'text-blue-400',
+                        titleColor: 'text-blue-400',
+                        dotColor: 'bg-blue-400 shadow-[0_0_8px_#60a5fa]',
+                        label: toast.title || 'SYSTEM UPDATE',
+                        Icon: Zap
+                    }
+                }[type] || {
+                        bg: 'bg-gray-900/95 border-blue-500/40 shadow-[0_0_30px_rgba(37,99,235,0.2)]',
+                        iconBg: 'bg-blue-500/20 border-blue-500/30',
+                        iconColor: 'text-blue-400',
+                        titleColor: 'text-blue-400',
+                        dotColor: 'bg-blue-400 shadow-[0_0_8px_#60a5fa]',
+                        label: toast.title || 'SYSTEM UPDATE',
+                        Icon: Zap
+                };
+
+                const { Icon } = styles;
+
+                return (
+                    <div className={`${styles.bg} backdrop-blur-xl border px-5 py-4 rounded-2xl flex items-center gap-4 transition-all duration-300 pointer-events-auto`}>
+                    <div className={`shrink-0 w-12 h-12 rounded-full ${styles.iconBg} flex items-center justify-center border shadow-inner`}>
+                        <Icon size={24} className={styles.iconColor} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                        <p className={`text-[10px] ${styles.titleColor} font-bold uppercase tracking-widest mb-1 flex items-center gap-2`}>
+                            <span className={`w-2 h-2 ${styles.dotColor} rounded-full animate-pulse`}></span>
+                            {styles.label}
+                        </p>
+                        <p className="text-sm font-medium text-white leading-tight break-words drop-shadow-sm">
+                            {toast.msg}
+                        </p>
+                    </div>
+                    </div>
+                );
+            })()}
+            </div>
         )}
-        
-        {view === 'plans' && <PlansView t={t} handleActivatePlan={handleActivatePlan} user={user} userBalance={user.balances.usdt} />}
-        
-        {view === 'wallet' && (
-          <WalletView 
-            t={t} 
-            user={user} 
-            formatCurrency={formatCurrency} 
-            formatFDT={formatFDT}
-            handleDepositAction={handleDepositAction} 
-            handleWithdrawAction={handleWithdrawAction} 
-            handleSwapAction={handleSwapAction} 
-          />
-        )}
-        
-        {view === 'menu' && <MenuView />}
-        {view === 'team' && <TeamView />}
-        {view === 'reports' && <ReportsView />}
-        {view === 'support' && <SupportView />}
-        {view === 'settings' && <SettingsView />}
-      </main>
-
-      <BottomNav />
-      <NotificationsPanel />
-
-      {/* Toast Notification */}
-      {toast && (
-        <div className="fixed top-6 left-1/2 transform -translate-x-1/2 z-[70] animate-slideDown w-[90%] max-w-sm pointer-events-none">
-           {(() => {
-              const type = toast.type || 'info';
-              const styles = {
-                success: {
-                    bg: 'bg-green-950/95 border-green-500/40 shadow-[0_0_30px_rgba(34,197,94,0.2)]',
-                    iconBg: 'bg-green-500/20 border-green-500/30',
-                    iconColor: 'text-green-400',
-                    titleColor: 'text-green-400',
-                    dotColor: 'bg-green-400 shadow-[0_0_8px_#4ade80]',
-                    label: toast.title || 'PROFIT REPORT',
-                    Icon: TrendingUp
-                },
-                error: {
-                    bg: 'bg-red-950/95 border-red-500/40 shadow-[0_0_30px_rgba(239,68,68,0.2)]',
-                    iconBg: 'bg-red-500/20 border-red-500/30',
-                    iconColor: 'text-red-400',
-                    titleColor: 'text-red-400',
-                    dotColor: 'bg-red-400 shadow-[0_0_8px_#f87171]',
-                    label: toast.title || 'SYSTEM ALERT',
-                    Icon: AlertTriangle
-                },
-                info: {
-                    bg: 'bg-gray-900/95 border-blue-500/40 shadow-[0_0_30px_rgba(37,99,235,0.2)]',
-                    iconBg: 'bg-blue-500/20 border-blue-500/30',
-                    iconColor: 'text-blue-400',
-                    titleColor: 'text-blue-400',
-                    dotColor: 'bg-blue-400 shadow-[0_0_8px_#60a5fa]',
-                    label: toast.title || 'SYSTEM UPDATE',
-                    Icon: Zap
-                }
-              }[type] || {
-                    bg: 'bg-gray-900/95 border-blue-500/40 shadow-[0_0_30px_rgba(37,99,235,0.2)]',
-                    iconBg: 'bg-blue-500/20 border-blue-500/30',
-                    iconColor: 'text-blue-400',
-                    titleColor: 'text-blue-400',
-                    dotColor: 'bg-blue-400 shadow-[0_0_8px_#60a5fa]',
-                    label: toast.title || 'SYSTEM UPDATE',
-                    Icon: Zap
-              };
-
-              const { Icon } = styles;
-
-              return (
-                <div className={`${styles.bg} backdrop-blur-xl border px-5 py-4 rounded-2xl flex items-center gap-4 transition-all duration-300 pointer-events-auto`}>
-                  <div className={`shrink-0 w-12 h-12 rounded-full ${styles.iconBg} flex items-center justify-center border shadow-inner`}>
-                     <Icon size={24} className={styles.iconColor} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                     <p className={`text-[10px] ${styles.titleColor} font-bold uppercase tracking-widest mb-1 flex items-center gap-2`}>
-                        <span className={`w-2 h-2 ${styles.dotColor} rounded-full animate-pulse`}></span>
-                        {styles.label}
-                     </p>
-                     <p className="text-sm font-medium text-white leading-tight break-words drop-shadow-sm">
-                        {toast.msg}
-                     </p>
-                  </div>
-                </div>
-              );
-           })()}
-        </div>
-      )}
+      </div>
     </div>
   );
 }

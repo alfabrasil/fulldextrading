@@ -27,12 +27,12 @@ export const PLANS = [
     name: 'Quantum Pulse AI', 
     flag: '🇺🇸', 
     profile: 'Estratégia Dinâmica',
-    // note: '📉 3% de taxa performance', // Removido
+    desc: '�40% em 30 dias🗓️\n💸30% do lucro gerado pela IA encima do capital é distribuido para o investidor.\n💸10% do lucro gerado pela IA encima do capital é distribuido para o sistema.\n✔️Lucro e capital Disponível',
     roiBot: 10, // 10%
-    roiUser: 40, // 40%
+    roiUser: 30, // 30%
     min: 10,
     max: 1000, 
-    roiTotal: 50, 
+    roiTotal: 40, 
     duration: 30, 
     color: 'border-green-500',
     highlight: true
@@ -42,13 +42,12 @@ export const PLANS = [
     name: 'Alpha Trend Pro', 
     flag: '🇺🇸', 
     profile: 'Estratégia Arrojada',
-    desc: '150% Lucro, Capital + Lucro Disponível.',
-    // note: '📉 3% de taxa performance', // Removido
+    desc: '💰120% em 60 dias🗓️\n💸100% do lucro gerado pela IA encima do capital é distribuido para o investidor.\n💸20% do lucro gerado pela IA encima do capital é distribuido para o sistema.\n✔️Lucro e capital Disponível',
     roiBot: 20, // 20%
-    roiUser: 130, // 130%
+    roiUser: 100, // 100%
     min: 10,
     max: 5000, 
-    roiTotal: 150, 
+    roiTotal: 120, 
     duration: 60, 
     color: 'border-purple-500'
   },
@@ -57,12 +56,12 @@ export const PLANS = [
     name: 'Binary Storm X', 
     flag: '🇺🇸',
     profile: 'Estratégia Moderada',
-    // note: '📉 3% de taxa performance', // Removido
+    desc: '�210% em 90 dias🗓️\n💸180% do lucro gerado pela IA encima do capital é distribuido para o investidor.\n💸30% do lucro gerado pela IA encima do capital é distribuido para o sistema.\n✔️Lucro e capital Disponível',
     roiBot: 30, // 30%
-    roiUser: 270, // 270%
+    roiUser: 180, // 180%
     min: 10,
     max: 10000, 
-    roiTotal: 300, 
+    roiTotal: 210, 
     duration: 90, 
     color: 'border-yellow-400'
   }

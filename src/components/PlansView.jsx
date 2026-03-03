@@ -59,11 +59,12 @@ export const PlansView = ({ t, handleActivatePlan, userBalance, user }) => {
           </div>
       </div>
       
+      <div className="grid grid-cols-1 gap-4">
       {PLANS.map(plan => (
         <div 
           key={plan.id} 
           onClick={() => openModal(plan)}
-          className={`bg-gray-800 border-l-4 ${plan.color} p-4 rounded-r-xl cursor-pointer hover:bg-gray-750 transition transform hover:translate-x-1 relative overflow-hidden group border-y border-r border-gray-700/50`}
+          className={`bg-gray-800 border-l-4 ${plan.color} p-4 rounded-r-xl cursor-pointer hover:bg-gray-750 transition transform hover:translate-x-1 relative overflow-hidden group border-y border-r border-gray-700/50 flex flex-col h-full`}
         >
           {plan.highlight && (
             <div className="absolute top-0 right-0 bg-yellow-500 text-black text-[10px] font-bold px-2 py-0.5 rounded-bl-lg z-10">
@@ -83,26 +84,28 @@ export const PlansView = ({ t, handleActivatePlan, userBalance, user }) => {
             </div>
           </div>
 
-          {plan.desc && (
-            <p className="text-gray-400 text-xs mt-2 mb-3 leading-relaxed border-b border-gray-700/50 pb-2">
-              {plan.desc}
-            </p>
-          )}
+          <div className="flex-1">
+            {plan.desc && (
+                <p className="text-gray-400 text-xs mt-2 mb-3 leading-relaxed border-b border-gray-700/50 pb-2 whitespace-pre-line">
+                {plan.desc}
+                </p>
+            )}
 
-          <div className="flex justify-between items-end">
-            <div>
-              <p className="text-xs text-gray-500">Lucro Total Estimado</p>
-              <span className="text-green-400 font-black text-2xl drop-shadow-[0_0_5px_rgba(74,222,128,0.5)]">
-                {plan.roiTotal}%
-              </span>
-              <p className="text-[10px] text-gray-400">em {plan.duration} dias</p>
-            </div>
+            <div className="flex justify-between items-end">
+                <div>
+                <p className="text-xs text-gray-500">Lucro Total Estimado</p>
+                <span className="text-green-400 font-black text-2xl drop-shadow-[0_0_5px_rgba(74,222,128,0.5)]">
+                    {plan.roiTotal}%
+                </span>
+                <p className="text-[10px] text-gray-400">em {plan.duration} dias</p>
+                </div>
 
-            <div className="text-right">
-               <p className="text-[10px] text-gray-500 mb-1">Entrada Mín / Máx</p>
-               <p className="text-white font-bold text-sm bg-gray-900/50 px-2 py-1 rounded inline-block border border-gray-700">
-                 ${plan.min} - ${plan.max}
-               </p>
+                <div className="text-right">
+                <p className="text-[10px] text-gray-500 mb-1">Entrada Mín / Máx</p>
+                <p className="text-white font-bold text-sm bg-gray-900/50 px-2 py-1 rounded inline-block border border-gray-700">
+                    ${plan.min} - ${plan.max}
+                </p>
+                </div>
             </div>
           </div>
 
@@ -123,6 +126,7 @@ export const PlansView = ({ t, handleActivatePlan, userBalance, user }) => {
           </div>
         </div>
       ))}
+      </div>
 
       {/* INVESTMENT MODAL */}
       {selectedPlan && (

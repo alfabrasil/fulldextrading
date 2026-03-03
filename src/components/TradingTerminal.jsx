@@ -273,7 +273,7 @@ export const TradingTerminal = ({ activePlan, onSync }) => {
   };
 
   return (
-    <div className="w-full max-w-md mx-auto my-6 animate-fadeIn px-2 sm:px-0">
+    <div className="w-full max-w-4xl mx-auto my-6 animate-fadeIn px-2 sm:px-4">
       {/* Container Principal com Efeito Glassmorphism e Borda Neon */}
       <div className="bg-gray-900/90 backdrop-blur-xl rounded-2xl border border-blue-500/30 shadow-[0_0_40px_rgba(37,99,235,0.15)] overflow-hidden relative">
         
@@ -305,135 +305,142 @@ export const TradingTerminal = ({ activePlan, onSync }) => {
         </div>
 
         {/* Display Principal (Preço e PnL Sessão) */}
-        <div className="p-5 relative">
-          <div className="flex justify-between items-end mb-6">
-            <div>
-              <p className="text-gray-400 text-[10px] font-mono mb-1 flex items-center gap-1">
-                <Activity size={10} /> EUR/USD (OTC)
-              </p>
-              <h2 className={`text-4xl font-mono font-black tracking-tighter ${history[history.length-1] > history[history.length-2] ? 'text-green-400 drop-shadow-[0_0_8px_rgba(74,222,128,0.4)]' : 'text-red-400 drop-shadow-[0_0_8px_rgba(248,113,113,0.4)]'}`}>
-                {price.toFixed(5)}
-              </h2>
-            </div>
-            <div className="text-right bg-gray-800/50 p-2 rounded-lg border border-gray-700/50 backdrop-blur-sm">
-               <p className="text-[9px] text-gray-500 uppercase tracking-wider mb-1">Total Equity</p>
-               <p className="text-xl font-bold font-mono text-white">
-                 ${(activePlan.amount + (activePlan.accumulated || 0) + sessionProfit).toFixed(2)}
-               </p>
-               <p className="text-[9px] text-gray-500 mt-1">
-                 Invested: <span className="text-blue-400">${activePlan.amount.toFixed(2)}</span>
-               </p>
-            </div>
+        <div className="p-4 flex flex-col gap-4">
+          
+          {/* Top Row: Price & Equity */}
+          <div className="flex flex-col gap-4">
+              <div className="flex justify-between items-center">
+                 <div>
+                    <p className="text-gray-400 text-[10px] font-mono mb-1 flex items-center gap-1">
+                      <Activity size={10} /> EUR/USD (OTC)
+                    </p>
+                    <h2 className={`text-5xl font-mono font-black tracking-tighter ${history[history.length-1] > history[history.length-2] ? 'text-green-400 drop-shadow-[0_0_8px_rgba(74,222,128,0.4)]' : 'text-red-400 drop-shadow-[0_0_8px_rgba(248,113,113,0.4)]'}`}>
+                      {price.toFixed(5)}
+                    </h2>
+                 </div>
+                 
+                 <div className="text-right bg-gray-800/50 p-3 rounded-xl border border-gray-700/50 backdrop-blur-sm min-w-[120px]">
+                    <p className="text-[9px] text-gray-500 uppercase tracking-wider mb-1">Total Equity</p>
+                    <p className="text-xl font-bold font-mono text-white">
+                      ${(activePlan.amount + (activePlan.accumulated || 0) + sessionProfit).toFixed(2)}
+                    </p>
+                    <p className="text-[9px] text-gray-500 mt-1">
+                      Invested: <span className="text-blue-400">${activePlan.amount.toFixed(2)}</span>
+                    </p>
+                 </div>
+              </div>
+
+              {/* Gráfico Dinâmico */}
+              <div className="h-64 w-full bg-gradient-to-b from-gray-800/20 to-transparent rounded-xl border border-gray-800/50 relative overflow-hidden shadow-inner">
+                  {/* Grid */}
+                  <div className="absolute inset-0 grid grid-cols-6 grid-rows-4 opacity-5 pointer-events-none">
+                      {[...Array(24)].map((_, i) => <div key={i} className="border border-gray-500"></div>)}
+                  </div>
+                  
+                  <svg viewBox="0 0 300 100" className="w-full h-full relative z-10" preserveAspectRatio="none">
+                      <defs>
+                        <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor={trend === 'bull' ? '#4ade80' : '#f87171'} stopOpacity="0.3" />
+                          <stop offset="100%" stopColor={trend === 'bull' ? '#4ade80' : '#f87171'} stopOpacity="0" />
+                        </linearGradient>
+                      </defs>
+                      <polygon 
+                        fill="url(#chartGradient)" 
+                        points={`${points} 300,100 0,100`} 
+                      />
+                      <polyline 
+                        fill="none" 
+                        stroke={trend === 'bull' ? '#4ade80' : '#f87171'} 
+                        strokeWidth="2" 
+                        points={points} 
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className="drop-shadow-[0_0_4px_rgba(255,255,255,0.2)]"
+                      />
+                  </svg>
+                  
+                  {/* Ping Indicador */}
+                  <div className={`absolute right-0 top-1/2 w-1.5 h-1.5 rounded-full ${trend === 'bull' ? 'bg-green-400 shadow-[0_0_10px_#4ade80]' : 'bg-red-400 shadow-[0_0_10px_#f87171]'} animate-ping`}></div>
+              </div>
           </div>
 
-          {/* Gráfico Dinâmico */}
-          <div className="h-32 w-full bg-gradient-to-b from-gray-800/20 to-transparent rounded-xl border border-gray-800/50 relative overflow-hidden mb-5 shadow-inner">
-             {/* Grid */}
-             <div className="absolute inset-0 grid grid-cols-6 grid-rows-4 opacity-5 pointer-events-none">
-                {[...Array(24)].map((_, i) => <div key={i} className="border border-gray-500"></div>)}
-             </div>
-             
-             <svg viewBox="0 0 300 100" className="w-full h-full relative z-10" preserveAspectRatio="none">
-                <defs>
-                  <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor={trend === 'bull' ? '#4ade80' : '#f87171'} stopOpacity="0.3" />
-                    <stop offset="100%" stopColor={trend === 'bull' ? '#4ade80' : '#f87171'} stopOpacity="0" />
-                  </linearGradient>
-                </defs>
-                <polygon 
-                   fill="url(#chartGradient)" 
-                   points={`${points} 300,100 0,100`} 
-                />
-                <polyline 
-                   fill="none" 
-                   stroke={trend === 'bull' ? '#4ade80' : '#f87171'} 
-                   strokeWidth="2" 
-                   points={points} 
-                   strokeLinecap="round"
-                   strokeLinejoin="round"
-                   className="drop-shadow-[0_0_4px_rgba(255,255,255,0.2)]"
-                />
-             </svg>
-             
-             {/* Ping Indicador */}
-             <div className={`absolute right-0 top-1/2 w-1.5 h-1.5 rounded-full ${trend === 'bull' ? 'bg-green-400 shadow-[0_0_10px_#4ade80]' : 'bg-red-400 shadow-[0_0_10px_#f87171]'} animate-ping`}></div>
-          </div>
-
-          {/* Relatório do Último Minuto */}
-          {minuteReport && (
-            <div className="mb-3 bg-blue-900/20 border border-blue-500/30 rounded-lg p-2 flex justify-between items-center animate-fadeIn shadow-lg backdrop-blur-md">
-                <div className="flex flex-col">
-                    <span className="text-[9px] text-blue-300 font-bold uppercase tracking-wider">Minute Report</span>
-                    <span className="text-[9px] text-gray-400 font-mono">{minuteReport.timestamp}</span>
-                </div>
-                <div className="flex gap-4 text-xs font-mono bg-black/20 px-3 py-1 rounded-md">
-                    <div className="text-center">
-                        <span className="text-[8px] text-gray-500 block uppercase">Wins</span>
-                        <span className="text-green-400 font-bold">{minuteReport.wins}</span>
-                    </div>
-                    <div className="text-center">
-                        <span className="text-[8px] text-gray-500 block uppercase">Loss</span>
-                        <span className="text-red-400 font-bold">{minuteReport.losses}</span>
-                    </div>
-                    <div className="text-center pl-2 border-l border-gray-700">
-                        <span className="text-[8px] text-gray-500 block uppercase">Net P&L</span>
-                        <span className={`${minuteReport.profit >= 0 ? 'text-green-400' : 'text-red-400'} font-bold`}>
-                            {minuteReport.profit >= 0 ? '+' : ''}{minuteReport.profit.toFixed(2)}
-                        </span>
-                    </div>
-                </div>
-            </div>
-          )}
-
-          {/* Lista de Operações (Scrollável e Responsiva) */}
-          <div className="space-y-2">
-            <div className="flex justify-between text-[9px] text-gray-500 uppercase font-bold px-3 py-1 bg-gray-800/50 rounded">
-              <span>Pair / Exchange</span>
-              <span className="text-center">Side / Type</span>
-              <span className="text-right">P&L (USDT)</span>
-            </div>
-            
-            <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1 custom-scrollbar">
-              {ops.map(op => (
-                <div key={op.id} className="bg-gray-800/40 hover:bg-gray-800/80 p-2 rounded flex justify-between items-center text-xs font-mono border-l-2 transition-all duration-300" 
-                     style={{ borderColor: Number(op.pnl) > 0 ? '#4ade80' : '#f87171' }}>
-                   <div className="flex flex-col">
-                      <span className="text-gray-200 font-bold">{op.pair}</span>
-                      <span className="text-[9px] text-gray-500">{op.exchange}</span>
-                   </div>
-                   <div className="text-center">
-                      <div className={`flex items-center justify-center gap-1 font-bold ${op.side === 'LONG' ? 'text-green-400' : 'text-red-400'}`}>
-                         {op.side === 'LONG' ? <ArrowUp size={10} /> : <ArrowDown size={10} />}
-                         {op.side}
+          <div className="flex flex-col gap-3">
+            {/* Relatório do Último Minuto */}
+            {minuteReport && (
+              <div className="bg-blue-900/10 border border-blue-500/20 rounded-lg p-3 flex justify-between items-center animate-fadeIn">
+                  <div className="flex flex-col">
+                      <span className="text-[9px] text-blue-300 font-bold uppercase tracking-wider">Minute Report</span>
+                      <span className="text-[9px] text-gray-400 font-mono">{minuteReport.timestamp}</span>
+                  </div>
+                  <div className="flex gap-4 text-xs font-mono">
+                      <div className="text-center">
+                          <span className="text-[8px] text-gray-500 block uppercase">Wins</span>
+                          <span className="text-green-400 font-bold">{minuteReport.wins}</span>
                       </div>
-                      <span className="text-[9px] text-blue-300 bg-blue-900/20 px-1 rounded">{op.type}</span>
-                   </div>
-                   <span className={`${Number(op.pnl) > 0 ? 'text-green-400' : 'text-red-400'} font-bold bg-gray-900/50 px-2 py-1 rounded min-w-[60px] text-right`}>
-                     {Number(op.pnl) > 0 ? '+' : ''}{Number(op.pnl).toFixed(4)}
-                   </span>
-                </div>
-              ))}
-              {ops.length === 0 && (
-                <div className="text-center text-gray-600 text-xs py-4 font-mono">
-                   Aguardando entrada de ordens...
-                </div>
-              )}
+                      <div className="text-center">
+                          <span className="text-[8px] text-gray-500 block uppercase">Loss</span>
+                          <span className="text-red-400 font-bold">{minuteReport.losses}</span>
+                      </div>
+                      <div className="text-center pl-2 border-l border-gray-700">
+                          <span className="text-[8px] text-gray-500 block uppercase">Net P&L</span>
+                          <span className={`${minuteReport.profit >= 0 ? 'text-green-400' : 'text-red-400'} font-bold`}>
+                              {minuteReport.profit >= 0 ? '+' : ''}{minuteReport.profit.toFixed(2)}
+                          </span>
+                      </div>
+                  </div>
+              </div>
+            )}
+
+            {/* Lista de Operações */}
+            <div className="flex flex-col min-h-0">
+              <div className="flex justify-between text-[9px] text-gray-500 uppercase font-bold px-3 py-2 bg-gray-800/30 rounded mb-1">
+                <span>Pair / Exchange</span>
+                <span className="text-center">Side / Type</span>
+                <span className="text-right">P&L (USDT)</span>
+              </div>
+              
+              <div className="space-y-1.5 overflow-y-auto pr-1 custom-scrollbar max-h-60">
+                {ops.map(op => (
+                  <div key={op.id} className="bg-gray-800/30 p-2 rounded flex justify-between items-center text-xs font-mono border-l-2 transition-all duration-300" 
+                      style={{ borderColor: Number(op.pnl) > 0 ? '#4ade80' : '#f87171' }}>
+                    <div className="flex flex-col">
+                        <span className="text-gray-200 font-bold">{op.pair}</span>
+                        <span className="text-[9px] text-gray-500">{op.exchange}</span>
+                    </div>
+                    <div className="text-center">
+                        <div className={`flex items-center justify-center gap-1 font-bold ${op.side === 'LONG' ? 'text-green-400' : 'text-red-400'}`}>
+                          {op.side === 'LONG' ? <ArrowUp size={10} /> : <ArrowDown size={10} />}
+                          {op.side}
+                        </div>
+                        <span className="text-[9px] text-blue-300 bg-blue-900/10 px-1 rounded">{op.type}</span>
+                    </div>
+                    <span className={`${Number(op.pnl) > 0 ? 'text-green-400' : 'text-red-400'} font-bold bg-gray-900/50 px-2 py-1 rounded min-w-[60px] text-right`}>
+                      {Number(op.pnl) > 0 ? '+' : ''}{Number(op.pnl).toFixed(4)}
+                    </span>
+                  </div>
+                ))}
+                {ops.length === 0 && (
+                  <div className="text-center text-gray-600 text-xs py-8 font-mono border border-dashed border-gray-800 rounded">
+                    Aguardando sinal da IA...
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
         
         {/* Footer Info */}
-        <div className="bg-black/40 backdrop-blur p-3 flex justify-between text-[9px] text-gray-400 font-mono border-t border-gray-800">
+        <div className="bg-black/40 backdrop-blur p-3 flex flex-wrap gap-4 justify-between text-[10px] sm:text-xs text-gray-400 font-mono border-t border-gray-800">
            <span className="flex items-center gap-1.5">
-             <ShieldCheck size={12} className="text-yellow-500"/> 
+             <ShieldCheck size={14} className="text-yellow-500"/> 
              PROTECTION: <span className="text-white">AI-GUARD V2</span>
            </span>
            <span className="flex items-center gap-1.5">
-             <Zap size={12} className="text-blue-500"/> 
+             <Zap size={14} className="text-blue-500"/> 
              LATENCY: <span className="text-green-400">12ms</span>
            </span>
            <span className="flex items-center gap-1.5">
-             <Activity size={12} className="text-purple-500"/> 
+             <Activity size={14} className="text-purple-500"/> 
              OPS: <span className="text-white">{opsCount}</span>
            </span>
         </div>
