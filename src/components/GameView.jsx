@@ -5,7 +5,7 @@ import { QuantumDash } from './QuantumDash';
 import { VaultHacker } from './VaultHacker';
 
 // HUB DE JOGOS
-export const GameView = ({ t, user, handleGamePlay, handleQuantumGameOver, handleVaultResult, handleBuyCredits, formatFDT }) => {
+export const GameView = ({ t, user, handleGamePlay, handleQuantumGameOver, handleVaultResult, handleBuyCredits, formatVDT }) => {
   const [activeGame, setActiveGame] = useState(null); // null (hub), 'vault', 'quantum'
 
   const games = [
@@ -32,11 +32,11 @@ export const GameView = ({ t, user, handleGamePlay, handleQuantumGameOver, handl
     {
       id: 'vault',
       name: 'VAULT HACKER',
-      desc: 'Desafie a sorte e dobre seus FDTs.',
+      desc: 'Desafie a sorte e dobre seus VDTs.',
       icon: <Gamepad2 size={32} className="text-purple-500" />,
       color: 'border-purple-500',
       bg: 'bg-purple-500/10',
-      cost: `${CONFIG.gameCost} FDT`,
+      cost: `${CONFIG.gameCost} VDT`,
       action: () => setActiveGame('vault')
     }
   ];
@@ -46,7 +46,7 @@ export const GameView = ({ t, user, handleGamePlay, handleQuantumGameOver, handl
       <VaultHacker 
         onClose={() => setActiveGame(null)} 
         onResult={handleVaultResult}
-        userBalance={user.balances.fdt}
+        userBalance={user.balances.vdt}
       />
     );
   }
@@ -107,16 +107,16 @@ export const GameView = ({ t, user, handleGamePlay, handleQuantumGameOver, handl
               <Trophy size={24} className="text-yellow-400" />
             </div>
             <div>
-              <p className="text-yellow-400 font-bold text-lg leading-none">FDT Token</p>
+              <p className="text-yellow-400 font-bold text-lg leading-none">VDT Token</p>
               <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider mt-1">Game Balance</p>
             </div>
           </div>
           <div className="text-right">
             <p className="text-white font-mono text-2xl font-bold tracking-tight drop-shadow-md">
-              {formatFDT ? formatFDT(user.balances.fdt) : `${user.balances.fdt} FDT`}
+              {formatVDT ? formatVDT(user.balances.vdt) : `${user.balances.vdt} VDT`}
             </p>
             <p className="text-[10px] text-gray-500 font-mono mt-1 bg-black/20 px-2 py-0.5 rounded-full inline-block">
-              100 FDT ≈ $1.00
+              100 VDT ≈ $1.00
             </p>
           </div>
         </div>

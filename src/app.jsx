@@ -34,117 +34,68 @@ import { GameView } from './components/GameView';
 import { PlansView } from './components/PlansView';
 import { WalletView } from './components/WalletView';
 import { TradingTerminal } from './components/TradingTerminal';
+import { LandingPage } from './components/LandingPage';
+import { AuthView } from './components/AuthView';
+
+// Estado padrão de segurança para evitar crashes com dados antigos/incompletos
+const SAFE_USER_DEFAULTS = {
+    balances: { usdt: 0, usdc: 0, vdt: 0 },
+    activePlan: null,
+    history: [],
+    notifications: [],
+    wallets: {},
+    gameCredits: { daily: 3 },
+    quantumStats: { highScore: 0, totalSparks: 0 }
+};
 
 /**
- * COMPONENTE PRINCIPAL
+ * COMPONENTE DASHBOARD (ANTIGO APP)
+ * Agora recebe o usuário autenticado e a função de logout
  */
-export default function App() {
+function Dashboard({ currentUser, onLogout }) {
   // --- ESTADO GERAL ---
   const [view, setView] = useState('home'); 
-  const [lang, setLang] = useState('pt');
-  const [loading, setLoading] = useState(true);
+  const [lang, setLang] = useState(currentUser.lang || 'pt');
+  const [loading, setLoading] = useState(false);
   const [showNotif, setShowNotif] = useState(false);
   const [toast, setToast] = useState(null);
 
   // --- DADOS DO USUÁRIO (Persistidos) ---
-  const [user, setUser] = useState({
-    name: 'Trader Alpha',
-    email: 'trader@alpha.com',
-    photoUrl: null, 
-    financialPassword: '',
-    wallets: {
-      usdt_bep20: '',
-      usdt_trc20: '',
-      usdt_polygon: '',
-      usdt_arbitrum: '',
-      usdc_arbitrum: ''
-    },
-    balances: { usdt: 0, usdc: 0, fdt: 0 }, 
-    activePlan: null, 
-    history: [],
-    notifications: [],
-    gameCredits: { daily: 3, lastReset: Date.now() },
-    quantumStats: { highScore: 0, totalSparks: 0 },
-    lastLogin: Date.now()
+  // Merge inicial com defaults para garantir que campos como notifications existam
+  const [user, setUser] = useState(() => {
+     // Inicializa com segurança, garantindo que balances.vdt seja um número
+     const initialUser = { ...SAFE_USER_DEFAULTS, ...currentUser };
+     if (typeof initialUser.balances.vdt !== 'number' || isNaN(initialUser.balances.vdt)) {
+         initialUser.balances.vdt = initialUser.balances.fdt || 0; // Tenta migrar FDT antigo ou zera
+     }
+     return initialUser;
   });
 
   const t = TRANSLATIONS[lang];
 
-  // --- EFEITOS DE INICIALIZAÇÃO E LOOP ---
+  // --- EFEITOS DE LOOP ---
+  // Atualiza user no Dashboard -> Atualiza no App pai -> Persiste
   useEffect(() => {
-    const savedData = localStorage.getItem('app_mvp_data_v8'); // Bump to v8 for Zero Balance
-    if (savedData) {
-      const parsed = JSON.parse(savedData);
-      
-      // Reset Diário de Créditos do Jogo
-      const now = Date.now();
-      const lastReset = parsed.gameCredits?.lastReset || 0;
-      const isNewDay = new Date(now).toDateString() !== new Date(lastReset).toDateString();
-      
-      let currentCredits = parsed.gameCredits || { daily: 3, lastReset: now };
-      
-      if (isNewDay) {
-          currentCredits = { daily: 3, lastReset: now };
-          parsed.notifications.unshift({
-            id: Date.now(),
-            title: 'Daily Energy',
-            msg: 'Sua energia diária foi recarregada! (3/3)',
-            read: false,
-            time: new Date().toLocaleTimeString()
-          });
-      }
-
-      // Cálculo de lucro offline (simplificado, já que agora o HFT sincroniza)
-      // Mantendo lógica de segurança caso o user fique dias fora
-      if (parsed.activePlan) {
-        const now = Date.now();
-        const lastTime = parsed.lastLogin || now;
-        const diffSeconds = (now - lastTime) / 1000;
-        
-        // Se ficou mais de 1 min fora, calcula um lucro médio
-        if (diffSeconds > 60) {
-            const plan = PLANS.find(p => p.id === parsed.activePlan.planId);
-            if (plan) {
-              const dailyRoi = plan.roiUser / plan.duration; 
-              const dailyProfit = parsed.activePlan.amount * (dailyRoi / 100);
-              const offlineProfit = dailyProfit * (diffSeconds / 86400);
-              
-              parsed.activePlan.accumulated += offlineProfit;
-              parsed.notifications.unshift({
-                id: Date.now(),
-                title: 'HFT Offline Report',
-                msg: `Lucro gerado em background: $${offlineProfit.toFixed(4)}`,
-                read: false,
-                time: new Date().toLocaleTimeString()
-              });
-            }
-        }
-      }
-      
-      const mergedUser = {
-        ...user,
-        ...parsed,
-        wallets: parsed.wallets || user.wallets,
-        email: parsed.email || user.email,
-        gameCredits: currentCredits,
-        quantumStats: parsed.quantumStats || { highScore: 0, totalSparks: 0 }
-      };
-      
-      setUser({ ...mergedUser, lastLogin: Date.now() });
-      setLang(parsed.lang || 'pt');
-    }
-    setLoading(false);
-  }, []);
-
-  useEffect(() => {
-    if (!loading) {
-      localStorage.setItem('app_mvp_data_v8', JSON.stringify({ ...user, lang }));
-    }
-  }, [user, lang, loading]);
+     // Sincroniza estado local com props se mudar (opcional, mas bom pra garantir)
+     // Na prática, vamos gerenciar o user aqui e salvar no localStorage diretamente ou via callback
+     // Para simplificar MVP: Dashboard gerencia seu user e salva no localStorage global 'vdex_users' ou sessão atual.
+     
+     // ATENÇÃO: O App pai gerencia a sessão. Mas as alterações de saldo ocorrem aqui.
+     // Vamos salvar as alterações do usuário específico no localStorage
+     
+     const saveUser = () => {
+         const storedUsers = JSON.parse(localStorage.getItem('vdex_users') || '[]');
+         const updatedUsers = storedUsers.map(u => u.email === user.email ? user : u);
+         localStorage.setItem('vdex_users', JSON.stringify(updatedUsers));
+         
+         // Também atualiza a sessão atual se necessário
+         localStorage.setItem('vdex_current_session', JSON.stringify(user));
+     };
+     
+     saveUser();
+  }, [user]);
 
   // Main Background Ticker (Financial Logic) - NETWORK ONLY
-  // A lógica de lucro do plano agora é controlada pelo TradingTerminal (a cada 5 min)
-  // Mas mantemos a rede aqui pois independe do terminal estar aberto
   useEffect(() => {
     const interval = setInterval(() => {
       if (!user.activePlan) return;
@@ -194,8 +145,10 @@ export default function App() {
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(val);
   };
 
-  const formatFDT = (val) => {
-    return `${Math.floor(val).toLocaleString()} FDT`;
+  const formatVDT = (val) => {
+    const num = Number(val);
+    if (isNaN(num)) return '0 VDT';
+    return `${Math.floor(num).toLocaleString()} VDT`;
   };
 
   // --- SYNC HFT (A cada 1 min) ---
@@ -289,8 +242,8 @@ export default function App() {
   };
 
   const handleGamePlay = () => {
-    if (user.balances.fdt < CONFIG.gameCost) {
-      triggerNotification('Game', 'FDT Insuficiente.', 'error');
+    if (user.balances.vdt < CONFIG.gameCost) {
+      triggerNotification('Game', 'VDT Insuficiente.', 'error');
       return;
     }
 
@@ -299,29 +252,19 @@ export default function App() {
 
     setUser(prev => ({
       ...prev,
-      balances: { ...prev.balances, fdt: prev.balances.fdt - CONFIG.gameCost + reward }
+      balances: { ...prev.balances, vdt: prev.balances.vdt - CONFIG.gameCost + reward }
     }));
 
-    if (win) triggerNotification('Game', `${t.win} ${CONFIG.gameCost * 2} FDT!`, 'success');
+    if (win) triggerNotification('Game', `${t.win} ${CONFIG.gameCost * 2} VDT!`, 'success');
     else triggerNotification('Game', t.lose, 'error');
   };
 
   const handleVaultResult = (win, amount) => {
     setUser(prev => {
-      let newBalance = prev.balances.fdt;
+      let newBalance = prev.balances.vdt;
       let historyItem = null;
 
       if (win) {
-         // Ganhou: Recebe o dobro do valor apostado (lucro líquido = amount)
-         // Como o custo foi "apostado", se ele já foi debitado antes, aqui creditamos 2x.
-         // Se não foi debitado antes (estratégia atual), aqui creditamos apenas o lucro (amount).
-         // Vamos assumir que o débito ocorre no momento do resultado para simplificar (ou seja, se perder, debita amount).
-         // Se ganhar, ganha amount (o saldo original se mantém + lucro).
-         
-         // Lógica simplificada:
-         // Se Win: Saldo += amount (Lucro)
-         // Se Loss: Saldo -= amount (Prejuízo)
-         
          newBalance += amount;
          historyItem = { 
              type: 'game_win', 
@@ -341,25 +284,19 @@ export default function App() {
 
       return {
         ...prev,
-        balances: { ...prev.balances, fdt: newBalance },
+        balances: { ...prev.balances, vdt: newBalance },
         history: [historyItem, ...prev.history]
       };
     });
 
-    if (win) triggerNotification('Vault Hacker', `SYSTEM HACKED! +${amount} FDT`, 'success');
-    else triggerNotification('Vault Hacker', `ACCESS DENIED! -${amount} FDT`, 'error');
+    if (win) triggerNotification('Vault Hacker', `SYSTEM HACKED! +${amount} VDT`, 'success');
+    else triggerNotification('Vault Hacker', `ACCESS DENIED! -${amount} VDT`, 'error');
   };
 
   const handleQuantumGameOver = (score, sparks) => {
     setUser(prev => {
       const newHighScore = Math.max(prev.quantumStats?.highScore || 0, score);
       const newTotalSparks = (prev.quantumStats?.totalSparks || 0) + sparks;
-      
-      // Consumir 1 crédito ao terminar (ou ao iniciar, mas aqui garante que jogou)
-      // Ajuste: Melhor consumir ao iniciar, mas como o estado é local no GameView, 
-      // vamos deduzir aqui para simplificar a integração sem callbacks complexos de start.
-      // Se quiséssemos ser estritos, deduziríamos no Start. 
-      // Vamos deduzir aqui considerando que "Game Over" implica que uma partida ocorreu.
       const newCredits = Math.max(0, (prev.gameCredits?.daily || 0) - 1);
 
       return {
@@ -373,15 +310,15 @@ export default function App() {
   };
 
   const handleBuyCredits = () => {
-    const COST = 50; // 50 FDT por recarga
-    if (user.balances.fdt < COST) {
-       triggerNotification('Loja', 'Saldo FDT insuficiente (Req: 50 FDT)', 'error');
+    const COST = 50; // 50 VDT por recarga
+    if (user.balances.vdt < COST) {
+       triggerNotification('Loja', 'Saldo VDT insuficiente (Req: 50 VDT)', 'error');
        return;
     }
     
     setUser(prev => ({
        ...prev,
-       balances: { ...prev.balances, fdt: prev.balances.fdt - COST },
+       balances: { ...prev.balances, vdt: prev.balances.vdt - COST },
        gameCredits: { ...prev.gameCredits, daily: 3 } // Recarga full
     }));
     triggerNotification('Loja', 'Energia recarregada com sucesso!', 'success');
@@ -433,15 +370,15 @@ export default function App() {
     triggerNotification('Sucesso', 'Solicitação de saque enviada!', 'success');
   };
 
-  const handleSwapAction = (amount, direction = 'fdtToUsd') => {
+  const handleSwapAction = (amount, direction = 'vdtToUsd') => {
     const numAmount = Number(amount);
     if (!numAmount || numAmount <= 0) return;
     
-    const rate = CONFIG.fdtRate;
+    const rate = CONFIG.vdtRate;
 
-    if (direction === 'fdtToUsd') {
-      if (user.balances.fdt < numAmount) {
-        triggerNotification('Erro', 'Saldo FDT insuficiente.', 'error');
+    if (direction === 'vdtToUsd') {
+      if (user.balances.vdt < numAmount) {
+        triggerNotification('Erro', 'Saldo VDT insuficiente.', 'error');
         return;
       }
 
@@ -451,10 +388,10 @@ export default function App() {
         ...prev,
         balances: { 
           ...prev.balances, 
-          fdt: prev.balances.fdt - numAmount,
+          vdt: prev.balances.vdt - numAmount,
           usdt: prev.balances.usdt + usdAmount
         },
-        history: [{ type: 'swap', amount: usdAmount, date: new Date().toLocaleTimeString(), desc: `${numAmount} FDT -> USD` }, ...prev.history]
+        history: [{ type: 'swap', amount: usdAmount, date: new Date().toLocaleTimeString(), desc: `${numAmount} VDT -> USD` }, ...prev.history]
       }));
       triggerNotification('Sucesso', `Troca realizada: +$${usdAmount.toFixed(2)}`, 'success');
       return;
@@ -465,18 +402,18 @@ export default function App() {
       return;
     }
 
-    const fdtAmount = numAmount * rate;
+    const vdtAmount = numAmount * rate;
 
     setUser(prev => ({
       ...prev,
       balances: { 
         ...prev.balances, 
         usdt: prev.balances.usdt - numAmount,
-        fdt: prev.balances.fdt + fdtAmount
+        vdt: prev.balances.vdt + vdtAmount
       },
-      history: [{ type: 'swap', amount: fdtAmount, date: new Date().toLocaleTimeString(), desc: `$${numAmount.toFixed(2)} USD -> ${fdtAmount} FDT` }, ...prev.history]
+      history: [{ type: 'swap', amount: vdtAmount, date: new Date().toLocaleTimeString(), desc: `$${numAmount.toFixed(2)} USD -> ${vdtAmount} VDT` }, ...prev.history]
     }));
-    triggerNotification('Sucesso', `Troca realizada: +${fdtAmount} FDT`, 'success');
+    triggerNotification('Sucesso', `Troca realizada: +${vdtAmount} VDT`, 'success');
   };
 
 
@@ -510,6 +447,9 @@ export default function App() {
             <span className="absolute -top-1 -right-1 w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></span>
           )}
         </div>
+        <button onClick={onLogout} className="text-red-500 hover:text-red-400 ml-1">
+             <LogOut size={20} />
+        </button>
       </div>
     </div>
   );
@@ -905,8 +845,8 @@ export default function App() {
             <button 
                 onClick={() => {
                     if (window.confirm('TEM CERTEZA? Isso apagará todos os dados e reiniciará a aplicação para o estado inicial.')) {
+                        localStorage.removeItem('vdex_current_session');
                         localStorage.removeItem('app_mvp_data_v8');
-                        localStorage.removeItem('hft_cycle_state_v2');
                         window.location.reload();
                     }
                 }}
@@ -1066,8 +1006,6 @@ export default function App() {
     </button>
   );
 
-  if (loading) return <div className="min-h-screen bg-black flex items-center justify-center text-blue-500 font-mono">INITIALIZING SYSTEM...</div>;
-
   return (
     <div className="min-h-screen bg-black text-gray-100 font-sans selection:bg-blue-500/30 overflow-hidden flex justify-center">
       <style>{`
@@ -1109,7 +1047,7 @@ export default function App() {
                 handleQuantumGameOver={handleQuantumGameOver}
                 handleVaultResult={handleVaultResult}
                 handleBuyCredits={handleBuyCredits}
-                formatFDT={formatFDT}
+                formatVDT={formatVDT}
             />
             )}
             
@@ -1117,14 +1055,14 @@ export default function App() {
             
             {view === 'wallet' && (
             <WalletView 
-                t={t} 
-                user={user} 
-                formatCurrency={formatCurrency} 
-                formatFDT={formatFDT}
-                handleDepositAction={handleDepositAction} 
-                handleWithdrawAction={handleWithdrawAction} 
-                handleSwapAction={handleSwapAction} 
-            />
+           t={t} 
+           user={user} 
+           formatCurrency={formatCurrency}
+           formatVDT={formatVDT} 
+           handleDepositAction={handleDepositAction}
+           handleWithdrawAction={handleWithdrawAction}
+           handleSwapAction={handleSwapAction}
+        />
             )}
             
             {view === 'menu' && <MenuView />}
@@ -1204,4 +1142,62 @@ export default function App() {
       </div>
     </div>
   );
+}
+
+/**
+ * COMPONENTE PRINCIPAL (CONTROLLER)
+ * Gerencia o fluxo entre Landing Page, Auth e Dashboard
+ */
+export default function App() {
+  // Estados de Roteamento
+  const [currentView, setCurrentView] = useState('landing'); // landing, auth, dashboard
+  const [currentUser, setCurrentUser] = useState(null);
+
+  // Inicialização: Verifica se já existe sessão ativa
+  useEffect(() => {
+    const session = localStorage.getItem('vdex_current_session');
+    if (session) {
+      try {
+        const parsed = JSON.parse(session);
+        // Garante que o usuário da sessão tenha todos os campos necessários
+        const safeUser = { ...SAFE_USER_DEFAULTS, ...parsed };
+        setCurrentUser(safeUser);
+        setCurrentView('dashboard');
+      } catch (e) {
+        console.error("Sessão corrompida:", e);
+        localStorage.removeItem('vdex_current_session');
+      }
+    }
+  }, []);
+
+  const handleNavigateToAuth = () => {
+    setCurrentView('auth');
+  };
+
+  const handleLoginSuccess = (user) => {
+    setCurrentUser(user);
+    localStorage.setItem('vdex_current_session', JSON.stringify(user));
+    setCurrentView('dashboard');
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('vdex_current_session');
+    setCurrentUser(null);
+    setCurrentView('landing'); // Volta para a Landing Page ao sair
+  };
+
+  // Renderização Condicional
+  if (currentView === 'landing') {
+    return <LandingPage onNavigate={handleNavigateToAuth} />;
+  }
+
+  if (currentView === 'auth') {
+    return <AuthView onLogin={handleLoginSuccess} />;
+  }
+
+  if (currentView === 'dashboard' && currentUser) {
+    return <Dashboard currentUser={currentUser} onLogout={handleLogout} />;
+  }
+
+  return <div className="bg-black min-h-screen"></div>;
 }

@@ -212,11 +212,11 @@ export const VaultHacker = ({ onClose, onResult, userBalance }) => {
                     <div className="flex justify-center gap-4 text-sm font-mono">
                         <div className="bg-gray-800 px-4 py-2 rounded border border-gray-700">
                             <span className="block text-gray-500 text-xs">CUSTO</span>
-                            <span className="text-red-400 font-bold">{COST} FDT</span>
+                            <span className="text-red-400 font-bold">{COST} VDT</span>
                         </div>
                         <div className="bg-gray-800 px-4 py-2 rounded border border-green-500/30">
                             <span className="block text-gray-500 text-xs">PRÊMIO</span>
-                            <span className="text-green-400 font-bold">{REWARD} FDT</span>
+                            <span className="text-green-400 font-bold">{REWARD} VDT</span>
                         </div>
                     </div>
                 </div>
@@ -264,7 +264,7 @@ export const VaultHacker = ({ onClose, onResult, userBalance }) => {
                     <h2 className="text-3xl font-black text-white mb-2">ACESSO CONCEDIDO</h2>
                     <p className="text-green-300 font-mono">RECOMPENSA TRANSFERIDA</p>
                     <div className="text-5xl font-black text-white mt-4 drop-shadow-[0_0_10px_rgba(74,222,128,0.5)]">
-                        +{COST} FDT
+                        +{COST} VDT
                     </div>
                 </div>
                 <button 
@@ -283,7 +283,7 @@ export const VaultHacker = ({ onClose, onResult, userBalance }) => {
                     <h2 className="text-3xl font-black text-white mb-2">FALHA DE SEGURANÇA</h2>
                     <p className="text-red-300 font-mono">SISTEMA BLOQUEADO</p>
                     <div className="text-xl font-bold text-gray-400 mt-4">
-                        -{COST} FDT
+                        -{COST} VDT
                     </div>
                 </div>
                 <div className="flex gap-4">

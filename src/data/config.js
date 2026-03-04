@@ -1,8 +1,8 @@
 // CONFIGURAÇÃO E DADOS ESTÁTICOS
 
 export const CONFIG = {
-  fdtRate: 100, // $1 = 100 FDT
-  gameCost: 50, // Custo em FDT para jogar
+  vdtRate: 100, // $1 = 100 VDT
+  gameCost: 50, // Custo em VDT para jogar
   dailyFreeCredits: 200, // Créditos diários
   minTransaction: 10, // Valor mínimo em Dólares
 };

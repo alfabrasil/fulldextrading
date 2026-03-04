@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { X, QrCode, AlertTriangle, Plus, Minus, ArrowRightLeft } from 'lucide-react';
 import { CONFIG } from '../data/config';
 
-export const WalletView = ({ t, user, formatCurrency, formatFDT, handleDepositAction, handleWithdrawAction, handleSwapAction }) => {
+export const WalletView = ({ t, user, formatCurrency, formatVDT, handleDepositAction, handleWithdrawAction, handleSwapAction }) => {
   const [action, setAction] = useState(null); // 'deposit', 'withdraw', 'swap'
 
   // Deposit State
@@ -15,24 +15,24 @@ export const WalletView = ({ t, user, formatCurrency, formatFDT, handleDepositAc
   const [wdAmount, setWdAmount] = useState('');
 
   // Swap State
-  const [swapFdt, setSwapFdt] = useState('');
-  const [swapDirection, setSwapDirection] = useState('fdtToUsd');
+  const [swapVdt, setSwapVdt] = useState('');
+  const [swapDirection, setSwapDirection] = useState('vdtToUsd');
 
   const networks = {
     usdt: ['BEP-20', 'TRC-20', 'POLYGON', 'ARBITRUM'],
     usdc: ['BEP-20', 'ARBITRUM']
   };
 
-  const FdtTokenCard = () => (
+  const VdtTokenCard = () => (
     <div className="bg-gray-800 p-4 rounded-xl border border-yellow-400/30">
       <div className="flex justify-between items-center">
         <div>
-          <p className="text-yellow-400 font-bold text-lg">FDT Token</p>
+          <p className="text-yellow-400 font-bold text-lg">VDT Token</p>
           <p className="text-xs text-gray-400">Internal Utility Token</p>
         </div>
         <div className="text-right">
-          <p className="text-white font-mono text-xl">{formatFDT(user.balances.fdt)}</p>
-          <p className="text-xs text-gray-500">100 FDT ≈ $1.00</p>
+          <p className="text-white font-mono text-xl">{formatVDT(user.balances.vdt)}</p>
+          <p className="text-xs text-gray-500">100 VDT ≈ $1.00</p>
         </div>
       </div>
     </div>
@@ -162,48 +162,48 @@ export const WalletView = ({ t, user, formatCurrency, formatFDT, handleDepositAc
                     type="number" 
                     placeholder="0" 
                     className="bg-transparent text-center text-3xl font-bold text-white w-full focus:outline-none placeholder-gray-600"
-                    value={swapFdt}
-                    onChange={(e) => setSwapFdt(e.target.value)}
+                    value={swapVdt}
+                    onChange={(e) => setSwapVdt(e.target.value)}
                   />
                   <span className="text-yellow-400 font-bold">
-                    {swapDirection === 'fdtToUsd' ? 'FDT' : 'USD'}
+                    {swapDirection === 'vdtToUsd' ? 'VDT' : 'USD'}
                   </span>
                 </div>
                 
                 <button 
                   type="button"
                   onClick={() => {
-                    setSwapDirection(prev => prev === 'fdtToUsd' ? 'usdToFdt' : 'fdtToUsd');
-                    setSwapFdt('');
+                    setSwapDirection(prev => prev === 'vdtToUsd' ? 'usdToVdt' : 'vdtToUsd');
+                    setSwapVdt('');
                   }}
                   className="my-4 text-gray-500 hover:text-white bg-gray-900/60 border border-gray-700 rounded-full p-2 transition"
                 >
-                  <ArrowRightLeft className={swapDirection === 'fdtToUsd' ? 'rotate-90' : '-rotate-90'} />
+                  <ArrowRightLeft className={swapDirection === 'vdtToUsd' ? 'rotate-90' : '-rotate-90'} />
                 </button>
 
                 <div className="text-center">
                   <p className="text-gray-400 text-sm mb-1">Você recebe</p>
                   <p className="text-3xl font-bold text-green-400">
-                    {swapDirection === 'fdtToUsd'
-                      ? `$${((Number(swapFdt) || 0) / 100).toFixed(2)}`
-                      : `${((Number(swapFdt) || 0) * 100).toFixed(0)}`
+                    {swapDirection === 'vdtToUsd'
+                      ? `$${((Number(swapVdt) || 0) / 100).toFixed(2)}`
+                      : `${((Number(swapVdt) || 0) * 100).toFixed(0)}`
                     }
                   </p>
                   <span className="text-green-600 font-bold">
-                    {swapDirection === 'fdtToUsd' ? 'USD' : 'FDT'}
+                    {swapDirection === 'vdtToUsd' ? 'USD' : 'VDT'}
                   </span>
                 </div>
               </div>
 
-              <FdtTokenCard />
+              <VdtTokenCard />
 
               <div className="text-center text-xs text-gray-500">
                 Taxa de conversão: 100 FDT = $1.00 USD
               </div>
 
               <button 
-                onClick={() => { handleSwapAction(swapFdt, swapDirection); setAction(null); }}
-                className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-lg"
+                onClick={() => { handleSwapAction(swapVdt, swapDirection); setAction(null); }}
+                className="w-full bg-yellow-600 hover:bg-yellow-500 text-white font-bold py-3 rounded-lg"
               >
                 CONFIRMAR TROCA
               </button>
@@ -338,11 +338,11 @@ export const WalletView = ({ t, user, formatCurrency, formatFDT, handleDepositAc
                         type="number" 
                         placeholder="0" 
                         className="bg-transparent text-right text-3xl font-bold text-white w-1/2 focus:outline-none placeholder-gray-600"
-                        value={swapFdt}
-                        onChange={(e) => setSwapFdt(e.target.value)}
+                        value={swapVdt}
+                        onChange={(e) => setSwapVdt(e.target.value)}
                         />
                         <span className="text-yellow-400 font-bold text-xl w-1/2 text-left">
-                        {swapDirection === 'fdtToUsd' ? 'FDT' : 'USD'}
+                        {swapDirection === 'vdtToUsd' ? 'VDT' : 'USD'}
                         </span>
                     </div>
                   </div>
@@ -350,25 +350,25 @@ export const WalletView = ({ t, user, formatCurrency, formatFDT, handleDepositAc
                   <button 
                     type="button"
                     onClick={() => {
-                      setSwapDirection(prev => prev === 'fdtToUsd' ? 'usdToFdt' : 'fdtToUsd');
-                      setSwapFdt('');
+                      setSwapDirection(prev => prev === 'vdtToUsd' ? 'usdToVdt' : 'vdtToUsd');
+                      setSwapVdt('');
                     }}
                     className="my-4 text-gray-500 hover:text-white bg-gray-900/60 border border-gray-700 rounded-full p-2 transition hover:bg-gray-800"
                   >
-                    <ArrowRightLeft className={swapDirection === 'fdtToUsd' ? 'rotate-90' : '-rotate-90'} />
+                    <ArrowRightLeft className={swapDirection === 'vdtToUsd' ? 'rotate-90' : '-rotate-90'} />
                   </button>
 
                   <div className="text-center w-full">
                     <p className="text-gray-400 text-sm mb-1">Você recebe</p>
                     <div className="flex items-center justify-center gap-2">
                         <p className="text-3xl font-bold text-green-400 w-1/2 text-right">
-                        {swapDirection === 'fdtToUsd'
-                            ? ((Number(swapFdt) || 0) / 100).toFixed(2)
-                            : ((Number(swapFdt) || 0) * 100).toFixed(0)
+                        {swapDirection === 'vdtToUsd'
+                            ? ((Number(swapVdt) || 0) / 100).toFixed(2)
+                            : ((Number(swapVdt) || 0) * 100).toFixed(0)
                         }
                         </p>
                         <span className="text-green-600 font-bold text-xl w-1/2 text-left">
-                        {swapDirection === 'fdtToUsd' ? 'USD' : 'FDT'}
+                        {swapDirection === 'vdtToUsd' ? 'USD' : 'VDT'}
                         </span>
                     </div>
                   </div>
@@ -376,18 +376,18 @@ export const WalletView = ({ t, user, formatCurrency, formatFDT, handleDepositAc
 
                 <div className="bg-gray-800 p-3 rounded-lg border border-yellow-400/30 flex justify-between items-center">
                    <div>
-                     <p className="text-yellow-400 font-bold text-sm">Saldo FDT</p>
+                     <p className="text-yellow-400 font-bold text-sm">Saldo VDT</p>
                      <p className="text-xs text-gray-400">Disponível para troca</p>
                    </div>
-                   <p className="text-white font-mono font-bold">{formatFDT(user.balances.fdt)}</p>
+                   <p className="text-white font-mono font-bold">{formatVDT(user.balances.vdt)}</p>
                 </div>
 
                 <div className="text-center text-xs text-gray-500">
-                  Taxa de conversão: 100 FDT = $1.00 USD
+                  Taxa de conversão: 100 VDT = $1.00 USD
                 </div>
 
                 <button 
-                  onClick={() => { handleSwapAction(swapFdt, swapDirection); setAction(null); }}
+                  onClick={() => { handleSwapAction(swapVdt, swapDirection); setAction(null); }}
                   className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-lg shadow-lg"
                 >
                   CONFIRMAR TROCA
@@ -427,7 +427,7 @@ export const WalletView = ({ t, user, formatCurrency, formatFDT, handleDepositAc
         </div>
       </div>
 
-      <FdtTokenCard />
+      <VdtTokenCard />
 
       {/* Transaction History Mini */}
       <div>
