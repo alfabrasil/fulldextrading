@@ -23,32 +23,17 @@ export const NETWORK_PLAN = [
 
 export const PLANS = [
   { 
-    id: 'quantum_pulse', 
-    name: 'Quantum Pulse AI', 
-    flag: '🇺🇸', 
-    profile: 'Estratégia Dinâmica',
-    desc: '�40% em 30 dias🗓️\n💸30% do lucro gerado pela IA encima do capital é distribuido para o investidor.\n💸10% do lucro gerado pela IA encima do capital é distribuido para o sistema.\n✔️Lucro e capital Disponível',
-    roiBot: 10, // 10%
-    roiUser: 30, // 30%
-    min: 10,
-    max: 1000, 
-    roiTotal: 40, 
-    duration: 30, 
-    color: 'border-green-500',
-    highlight: true
-  },
-  { 
     id: 'alpha_trend', 
     name: 'Alpha Trend Pro', 
     flag: '🇺🇸', 
     profile: 'Estratégia Arrojada',
-    desc: '💰120% em 60 dias🗓️\n💸100% do lucro gerado pela IA encima do capital é distribuido para o investidor.\n💸20% do lucro gerado pela IA encima do capital é distribuido para o sistema.\n✔️Lucro e capital Disponível',
-    roiBot: 20, // 20%
-    roiUser: 100, // 100%
+    desc: '💰100% em 30 dias úteis🗓️\n💸90% do lucro gerado pela IA sobre o capital é distribuido para o investidor.\n💸10% do lucro gerado pela IA sobre o capital é distribuido para o sistema.\n✔️Lucro e capital Disponível\n✔️Saques de rendimentos a cada 10 dias',
+    roiBot: 10, // 10%
+    roiUser: 90, // 90%
     min: 10,
     max: 5000, 
-    roiTotal: 120, 
-    duration: 60, 
+    roiTotal: 100, 
+    duration: 30, // 30 business days
     color: 'border-purple-500'
   },
   { 
@@ -56,13 +41,13 @@ export const PLANS = [
     name: 'Binary Storm X', 
     flag: '🇺🇸',
     profile: 'Estratégia Moderada',
-    desc: '�210% em 90 dias🗓️\n💸180% do lucro gerado pela IA encima do capital é distribuido para o investidor.\n💸30% do lucro gerado pela IA encima do capital é distribuido para o sistema.\n✔️Lucro e capital Disponível',
-    roiBot: 30, // 30%
-    roiUser: 180, // 180%
+    desc: '💰300% em 90 dias úteis🗓️\n💸280% do lucro gerado pela IA sobre o capital é distribuido para o investidor.\n💸20% do lucro gerado pela IA sobre o capital é distribuido para o sistema.\n✔️Lucro e capital Disponível\n✔️Saques de rendimentos todos os dias',
+    roiBot: 20, // 20%
+    roiUser: 280, // 280%
     min: 10,
     max: 10000, 
-    roiTotal: 210, 
-    duration: 90, 
+    roiTotal: 300, 
+    duration: 90, // 90 business days
     color: 'border-yellow-400'
   }
 ];

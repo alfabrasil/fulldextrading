@@ -130,8 +130,8 @@ export const PlansView = ({ t, handleActivatePlan, userBalance, user }) => {
 
       {/* INVESTMENT MODAL */}
       {selectedPlan && (
-        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fadeIn">
-            <div className="bg-gray-900 w-full max-w-sm rounded-2xl border border-gray-700 shadow-2xl overflow-hidden animate-slideUp max-h-[85vh] sm:max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fadeIn">
+            <div className="bg-gray-900 w-full max-w-sm rounded-2xl border border-gray-700 shadow-2xl overflow-hidden animate-slideUp max-h-[80dvh] sm:max-h-[90vh] overflow-y-auto">
                 <div className={`p-4 ${selectedPlan.bg || 'bg-blue-600'} flex justify-between items-center`}>
                     <h3 className="text-white font-bold text-lg flex items-center gap-2">
                         {selectedPlan.flag} {selectedPlan.name}

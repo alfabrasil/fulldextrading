@@ -104,24 +104,24 @@ export function AuthView({ onLogin }) {
   };
 
   return (
-    <div className="min-h-screen bg-black flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Background Effects */}
-      <div className="absolute top-0 left-0 w-full h-full overflow-hidden z-0">
-         <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-blue-900/20 rounded-full blur-[100px]"></div>
-         <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-cyan-900/20 rounded-full blur-[100px]"></div>
+    <div className="min-h-[100dvh] w-full bg-black flex flex-col items-center justify-center p-4 relative overflow-x-hidden overflow-y-auto pt-[max(env(safe-area-inset-top),64px)] md:pt-32 pb-[env(safe-area-inset-bottom,20px)] md:bg-app-desktop bg-app-mobile bg-fixed selection:bg-yellow-500/30">
+      {/* Background Effects / Overlay */}
+      <div className="absolute inset-0 bg-black/50 z-0 pointer-events-none"></div>
+      <div className="absolute top-0 left-0 w-full h-full overflow-hidden z-0 pointer-events-none">
+         <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-yellow-600/10 rounded-full blur-[100px]"></div>
+         <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-green-600/10 rounded-full blur-[100px]"></div>
       </div>
 
-      <div className="w-full max-w-md bg-gray-900/80 backdrop-blur-xl border border-gray-800 rounded-3xl p-8 shadow-2xl relative z-10 animate-fade-in">
+      <div className="w-full max-w-md bg-gray-950/40 backdrop-blur-2xl border border-gray-800/50 rounded-3xl p-6 md:p-8 shadow-2xl relative z-10 animate-fade-in mt-16 md:mt-24 mb-16 md:mb-24 shrink-0">
         
-        {/* Header Logo */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-tr from-blue-600 to-cyan-500 rounded-full shadow-[0_0_20px_rgba(37,99,235,0.5)] mb-4">
-            <Zap size={32} className="text-white fill-current" />
-          </div>
-          <h2 className="text-3xl font-black text-white tracking-tight">
-            VDEX<span className="text-blue-500">TRADING</span>
-          </h2>
-          <p className="text-gray-400 text-sm mt-2">
+        {/* Header Logo Outside Container to save space */}
+        <div className="absolute -top-[10rem] md:-top-[12rem] left-1/2 transform -translate-x-1/2 w-full text-center">
+          <img src="/logo/logoVdex.png" alt="VDexTrading" className="h-[12rem] md:h-[13.5rem] w-auto mx-auto select-none drop-shadow-[0_0_14px_rgba(234,179,8,0.4)] object-contain" />
+        </div>
+
+        <div className="text-center mb-6 pt-4">
+          <h2 className="sr-only">VDexTrading</h2>
+          <p className="text-gray-400 text-sm">
             {isLogin ? 'Acesse seu painel de controle' : 'Inicie sua jornada automatizada'}
           </p>
         </div>

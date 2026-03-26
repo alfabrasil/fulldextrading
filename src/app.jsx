@@ -59,6 +59,7 @@ function Dashboard({ currentUser, onLogout }) {
   const [loading, setLoading] = useState(false);
   const [showNotif, setShowNotif] = useState(false);
   const [toast, setToast] = useState(null);
+  const [reportsTab, setReportsTab] = useState('all');
 
   // --- DADOS DO USUÁRIO (Persistidos) ---
   // Merge inicial com defaults para garantir que campos como notifications existam
@@ -72,6 +73,10 @@ function Dashboard({ currentUser, onLogout }) {
   });
 
   const t = TRANSLATIONS[lang];
+
+  useEffect(() => {
+    if (view === 'reports') setReportsTab('all');
+  }, [view]);
 
   // --- EFEITOS DE LOOP ---
   // Atualiza user no Dashboard -> Atualiza no App pai -> Persiste
@@ -151,12 +156,127 @@ function Dashboard({ currentUser, onLogout }) {
     return `${Math.floor(num).toLocaleString()} VDT`;
   };
 
+  const getDayKey = (d) => {
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
+  const isBusinessDay = (d) => {
+    const day = d.getDay();
+    return day >= 1 && day <= 5;
+  };
+
+  const randomInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+
+  const randN = () => {
+    let u = 0;
+    let v = 0;
+    while (u === 0) u = Math.random();
+    while (v === 0) v = Math.random();
+    return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+  };
+
+  const generateDailyPnls = (target, minutes) => {
+    const mean = target / minutes;
+    const std = Math.abs(mean) * 2.2;
+    const minPnl = -Math.abs(mean) * 6;
+    const maxPnl = Math.abs(mean) * 10;
+
+    for (let attempt = 0; attempt < 30; attempt++) {
+      let values = Array.from({ length: minutes }, () => {
+        const v = mean + randN() * std;
+        return Math.max(minPnl, Math.min(maxPnl, v));
+      });
+
+      let sum = values.reduce((a, b) => a + b, 0);
+      const diff = target - sum;
+      const adj = diff / minutes;
+      values = values.map(v => v + adj);
+      sum = values.reduce((a, b) => a + b, 0);
+      values[values.length - 1] += (target - sum);
+
+      const negs = values.filter(v => v < 0).length;
+      if (negs >= Math.floor(minutes * 0.18) && Number.isFinite(values[0])) return values;
+    }
+
+    const values = Array.from({ length: minutes }, () => mean);
+    values[values.length - 1] += (target - values.reduce((a, b) => a + b, 0));
+    return values;
+  };
+
+  const [dayTick, setDayTick] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!user.activePlan) return;
+    const interval = setInterval(() => setDayTick(Date.now()), 60_000);
+    return () => clearInterval(interval);
+  }, [user.activePlan?.planId]);
+
+  useEffect(() => {
+    if (!user.activePlan) return;
+    const planMeta = PLANS.find(p => p.id === user.activePlan.planId);
+    if (!planMeta) return;
+
+    const now = new Date();
+    const dayKey = getDayKey(now);
+    const biz = isBusinessDay(now);
+
+    setUser(prev => {
+      if (!prev.activePlan) return prev;
+      const current = prev.activePlan.dailyState;
+
+      if (!biz) {
+        if (current?.dayKey === dayKey && current?.status === 'weekend') return prev;
+        return {
+          ...prev,
+          activePlan: {
+            ...prev.activePlan,
+            dailyState: {
+              dayKey,
+              status: 'weekend'
+            }
+          }
+        };
+      }
+
+      const dailyTargetPct = planMeta.roiTotal / planMeta.duration;
+      const dailyTargetProfit = prev.activePlan.amount * (dailyTargetPct / 100);
+
+      if (current?.dayKey === dayKey && (current.status === 'running' || current.status === 'done')) return prev;
+
+      const minutesPlanned = randomInt(120, 180);
+      const pnlSeries = generateDailyPnls(dailyTargetProfit, minutesPlanned);
+
+      return {
+        ...prev,
+        activePlan: {
+          ...prev.activePlan,
+          dailyState: {
+            dayKey,
+            status: 'running',
+            dailyTargetPct,
+            dailyTargetProfit,
+            minutesPlanned,
+            minuteIndex: 0,
+            profitToday: 0,
+            pnlSeries
+          }
+        }
+      };
+    });
+  }, [user.activePlan?.planId, user.activePlan?.amount, dayTick]);
+
   // --- SYNC HFT (A cada 1 min) ---
   const handleHftSync = (profit, opsCount) => {
      if (profit === 0 && opsCount === 0) return;
 
      const now = new Date();
      const timeString = now.toLocaleTimeString();
+
+     let completedDailyTarget = false;
+     let completedTargetPct = null;
 
      setUser(prev => {
          // Evitar duplicidade de registros no mesmo segundo (React StrictMode ou Timer Glitch)
@@ -168,11 +288,36 @@ function Dashboard({ currentUser, onLogout }) {
              return prev;
          }
 
+         const dailyState = prev.activePlan?.dailyState;
+         let nextDailyState = dailyState;
+         if (dailyState?.status === 'running' && dailyState.dayKey === getDayKey(now)) {
+           const nextIndex = (dailyState.minuteIndex || 0) + 1;
+           const nextProfitToday = (dailyState.profitToday || 0) + profit;
+
+           if (nextIndex >= (dailyState.minutesPlanned || 0)) {
+             completedDailyTarget = true;
+             completedTargetPct = dailyState.dailyTargetPct;
+             nextDailyState = {
+               ...dailyState,
+               status: 'done',
+               minuteIndex: nextIndex,
+               profitToday: dailyState.dailyTargetProfit
+             };
+           } else {
+             nextDailyState = {
+               ...dailyState,
+               minuteIndex: nextIndex,
+               profitToday: nextProfitToday
+             };
+           }
+         }
+
          return {
             ...prev,
             activePlan: {
                 ...prev.activePlan,
-                accumulated: (prev.activePlan?.accumulated || 0) + profit
+                accumulated: (prev.activePlan?.accumulated || 0) + profit,
+                dailyState: nextDailyState
             },
             history: [
                 { 
@@ -193,6 +338,14 @@ function Dashboard({ currentUser, onLogout }) {
          `Ciclo finalizado: ${opsCount} operações. Lucro: ${sign}$${profit.toFixed(4)}`,
          profit >= 0 ? 'success' : 'error'
      );
+
+     if (completedDailyTarget) {
+       triggerNotification(
+         'Meta Diária',
+         `Meta diária atingida (${Number(completedTargetPct || 0).toFixed(2)}%). Robô pausado até o próximo dia útil.`,
+         'success'
+       );
+     }
   };
 
   // --- AÇÕES DO USUÁRIO ---
@@ -357,6 +510,10 @@ function Dashboard({ currentUser, onLogout }) {
       triggerNotification('Erro', `Saque mínimo de $${CONFIG.minTransaction}`, 'error');
       return;
     }
+    if (numAmount > 10000) {
+      triggerNotification('Erro', `Saque máximo diário é de $10000`, 'error');
+      return;
+    }
     if (user.balances[asset] < numAmount) {
       triggerNotification('Erro', `Saldo insuficiente.`, 'error');
       return;
@@ -420,9 +577,9 @@ function Dashboard({ currentUser, onLogout }) {
   // --- SUB-COMPONENTES (Renderização) ---
 
   const Header = () => (
-    <div className="flex justify-between items-center p-4 bg-gray-900 border-b border-gray-800 shrink-0 z-50">
+    <div className="flex justify-between items-center p-4 bg-gray-950/40 backdrop-blur-md border-b border-gray-800/50 shrink-0 z-50">
       <div className="flex items-center gap-2">
-        <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-500 to-cyan-400 flex items-center justify-center shadow-[0_0_10px_#3b82f6] overflow-hidden">
+        <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-yellow-500 to-green-400 flex items-center justify-center shadow-[0_0_10px_rgba(234,179,8,0.5)] overflow-hidden">
           {user.photoUrl ? (
             <img src={user.photoUrl} alt="Profile" className="w-full h-full object-cover" />
           ) : (
@@ -487,7 +644,7 @@ function Dashboard({ currentUser, onLogout }) {
 
       {/* Condicional: Se tiver plano ativo, mostra Terminal HFT, senão, visual padrão */}
       {/* Passamos o onSync para que o terminal atualize o saldo a cada 5 min */}
-      {user.activePlan ? <TradingTerminal activePlan={user.activePlan} onSync={handleHftSync} /> : <RobotVisual />}
+      {user.activePlan ? <TradingTerminal activePlan={{ ...(PLANS.find(p => p.id === user.activePlan.planId) || {}), ...user.activePlan }} schedule={user.activePlan.dailyState} onSync={handleHftSync} /> : <RobotVisual />}
 
       <div className="flex justify-center">
         <button 
@@ -504,7 +661,15 @@ function Dashboard({ currentUser, onLogout }) {
            <Activity className="text-blue-400 mb-2" size={24} />
            <span className="text-xs text-gray-400">Yield Today</span>
            <span className="text-white font-bold text-lg">
-             {user.activePlan ? '+2.41%' : '0.00%'}
+             {(() => {
+               const ds = user.activePlan?.dailyState;
+               if (!ds || ds.status === 'weekend') return '0.00%';
+               const base = Number(user.activePlan?.amount) || 0;
+               const pct = base > 0 ? ((Number(ds.profitToday || 0) / base) * 100) : 0;
+               const shown = `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`;
+               if (ds.status === 'done') return shown;
+               return shown;
+             })()}
            </span>
         </div>
         <div className="bg-gray-800/50 p-4 rounded-xl border border-gray-700 flex flex-col items-center">
@@ -913,6 +1078,69 @@ function Dashboard({ currentUser, onLogout }) {
           ))}
       </div>
 
+      <h3 className="text-gray-400 text-sm mb-3 uppercase tracking-wider mt-6">Bônus Qualificador</h3>
+      <div className="space-y-4 mb-6">
+          <div className="bg-gradient-to-r from-orange-800 to-orange-900 p-4 rounded-xl border border-orange-500/30">
+              <div className="flex justify-between items-center mb-2">
+                  <h4 className="text-orange-300 font-bold text-lg flex items-center gap-2">BRONZE</h4>
+                  <span className="text-green-400 font-bold">+$100.00</span>
+              </div>
+              <div className="flex justify-between text-xs text-gray-300 mb-1">
+                  <span>Progresso: $0.00</span>
+                  <span>Meta: $1,000.00</span>
+              </div>
+              <div className="w-full bg-gray-900 rounded-full h-2">
+                  <div className="bg-orange-500 h-2 rounded-full" style={{width: '0%'}}></div>
+              </div>
+              <p className="text-[10px] text-gray-400 mt-2">Apenas comissões no nível 1. A cada nível atingido o progresso é zerado.</p>
+          </div>
+
+          <div className="bg-gradient-to-r from-gray-500 to-gray-700 p-4 rounded-xl border border-gray-400/30">
+              <div className="flex justify-between items-center mb-2">
+                  <h4 className="text-gray-100 font-bold text-lg flex items-center gap-2">PRATA</h4>
+                  <span className="text-green-400 font-bold">+$200.00</span>
+              </div>
+              <div className="flex justify-between text-xs text-gray-200 mb-1">
+                  <span>Progresso: $0.00</span>
+                  <span>Meta: $10,000.00</span>
+              </div>
+              <div className="w-full bg-gray-900 rounded-full h-2">
+                  <div className="bg-gray-300 h-2 rounded-full" style={{width: '0%'}}></div>
+              </div>
+              <p className="text-[10px] text-gray-300 mt-2">Apenas comissões no nível 1. A cada nível atingido o progresso é zerado.</p>
+          </div>
+
+          <div className="bg-gradient-to-r from-yellow-600 to-yellow-800 p-4 rounded-xl border border-yellow-500/30">
+              <div className="flex justify-between items-center mb-2">
+                  <h4 className="text-yellow-300 font-bold text-lg flex items-center gap-2">OURO</h4>
+                  <span className="text-green-400 font-bold">+$300.00</span>
+              </div>
+              <div className="flex justify-between text-xs text-gray-200 mb-1">
+                  <span>Progresso: $0.00</span>
+                  <span>Meta: $20,000.00</span>
+              </div>
+              <div className="w-full bg-gray-900 rounded-full h-2">
+                  <div className="bg-yellow-400 h-2 rounded-full" style={{width: '0%'}}></div>
+              </div>
+              <p className="text-[10px] text-gray-300 mt-2">Apenas comissões no nível 1. A cada nível atingido o progresso é zerado.</p>
+          </div>
+
+          <div className="bg-gradient-to-r from-cyan-700 to-cyan-900 p-4 rounded-xl border border-cyan-500/30">
+              <div className="flex justify-between items-center mb-2">
+                  <h4 className="text-cyan-300 font-bold text-lg flex items-center gap-2">DIAMANTE</h4>
+                  <span className="text-green-400 font-bold">+$500.00</span>
+              </div>
+              <div className="flex justify-between text-xs text-gray-200 mb-1">
+                  <span>Progresso: $0.00</span>
+                  <span>Meta: $50,000.00</span>
+              </div>
+              <div className="w-full bg-gray-900 rounded-full h-2">
+                  <div className="bg-cyan-400 h-2 rounded-full" style={{width: '0%'}}></div>
+              </div>
+              <p className="text-[10px] text-gray-300 mt-2">Apenas comissões no nível 1. A cada nível atingido o progresso é zerado.</p>
+          </div>
+      </div>
+
       <h3 className="text-gray-400 text-sm mb-3 uppercase tracking-wider">Histórico Recente</h3>
       <div className="space-y-3">
         {user.history.filter(h => h.type === 'unilevel' || h.type === 'residual').length === 0 ? (
@@ -937,45 +1165,150 @@ function Dashboard({ currentUser, onLogout }) {
     </div>
   );
 
-  const ReportsView = () => (
-    <div className="px-4 pb-24 pt-4 animate-fadeIn">
-       <div className="flex items-center gap-2 mb-6">
-        <button onClick={() => setView('menu')} className="text-gray-400 hover:text-white"><ChevronRight className="rotate-180" /></button>
-        <h2 className="text-2xl font-bold text-white">{t.reports}</h2>
-      </div>
+  const ReportsView = () => {
+    const tabs = [
+      { id: 'all', label: 'Todas' },
+      { id: 'entries', label: 'Entradas' },
+      { id: 'exits', label: 'Saídas' },
+      { id: 'bots', label: 'Bots' }
+    ];
 
-      {/* Mock Tabs */}
-      <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
-        <button className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold whitespace-nowrap">Todas</button>
-        <button className="bg-gray-800 text-gray-400 px-4 py-2 rounded-lg text-sm whitespace-nowrap">Entradas</button>
-        <button className="bg-gray-800 text-gray-400 px-4 py-2 rounded-lg text-sm whitespace-nowrap">Saídas</button>
-        <button className="bg-gray-800 text-gray-400 px-4 py-2 rounded-lg text-sm whitespace-nowrap">Bots</button>
-      </div>
+    const num = (v) => {
+      const n = Number(v);
+      return Number.isFinite(n) ? n : 0;
+    };
 
-      <div className="space-y-3">
-          {user.history.map((tx, idx) => (
-              <div key={idx} className="bg-gray-800/50 p-4 rounded-lg flex justify-between items-center border border-gray-700/50">
-                <div className="flex items-center gap-3">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center ${tx.type === 'deposit' ? 'bg-green-500/20 text-green-400' : tx.type.includes('bonus') || tx.type === 'unilevel' || tx.type === 'residual' ? 'bg-purple-500/20 text-purple-400' : 'bg-blue-500/20 text-blue-400'}`}>
-                    {tx.type === 'deposit' ? <Plus size={14} /> : (tx.type === 'unilevel' || tx.type === 'residual') ? <Users size={14} /> : <Activity size={14} />}
+    const isBotTx = (tx) => tx?.type?.startsWith('plan_') || tx?.type === 'hft_profit';
+    const isEntryTx = (tx) => {
+      const type = tx?.type;
+      if (!type) return false;
+      if (type === 'hft_profit') return num(tx.amount) > 0;
+      return type === 'deposit' || type === 'unilevel' || type === 'residual' || type.includes('bonus') || type === 'game_win' || type === 'swap';
+    };
+    const isExitTx = (tx) => {
+      const type = tx?.type;
+      if (!type) return false;
+      if (type === 'hft_profit') return num(tx.amount) < 0;
+      return type === 'withdraw' || type === 'plan_activation' || type === 'plan_upgrade' || type === 'game_loss';
+    };
+
+    const filtered = user.history.filter((tx) => {
+      if (reportsTab === 'entries') return isEntryTx(tx);
+      if (reportsTab === 'exits') return isExitTx(tx);
+      if (reportsTab === 'bots') return isBotTx(tx);
+      return true;
+    });
+
+    const getTitle = (tx) => {
+      if (tx.type === 'plan_activation') return 'Plan Activation';
+      if (tx.type === 'plan_upgrade') return 'Plan Upgrade';
+      if (tx.type === 'hft_profit') return 'HFT Profit';
+      if (tx.type === 'deposit') return 'Deposit';
+      if (tx.type === 'withdraw') return 'Withdraw';
+      if (tx.type === 'swap') return 'Swap';
+      if (tx.type === 'unilevel') return 'Unilevel Bonus';
+      if (tx.type === 'residual') return 'Residual Bonus';
+      if (tx.type === 'game_win') return 'Game Win';
+      if (tx.type === 'game_loss') return 'Game Loss';
+      return (tx.type || '').replaceAll('_', ' ');
+    };
+
+    const getMeta = (tx) => {
+      if (tx.desc) return tx.desc;
+      return tx.date || '';
+    };
+
+    const getFlow = (tx) => {
+      if (tx.type === 'hft_profit') return num(tx.amount) >= 0 ? 'in' : 'out';
+      if (isExitTx(tx)) return 'out';
+      if (isEntryTx(tx)) return 'in';
+      return 'neutral';
+    };
+
+    const formatAmount = (tx) => {
+      const n = num(tx.amount);
+      const flow = getFlow(tx);
+      const abs = Math.abs(n);
+      const fixed = tx.type === 'hft_profit' ? abs.toFixed(4) : abs.toFixed(2);
+      if (flow === 'out') return `-$${fixed}`;
+      if (flow === 'in') return `+$${fixed}`;
+      return `$${fixed}`;
+    };
+
+    const iconFor = (tx) => {
+      if (tx.type === 'deposit') return <Plus size={14} />;
+      if (tx.type === 'withdraw') return <Minus size={14} />;
+      if (tx.type === 'swap') return <ArrowRightLeft size={14} />;
+      if (tx.type === 'unilevel' || tx.type === 'residual' || (tx.type || '').includes('bonus')) return <Users size={14} />;
+      if ((tx.type || '').startsWith('plan_')) return <Zap size={14} />;
+      if (tx.type === 'hft_profit') return <TrendingUp size={14} />;
+      if (tx.type === 'game_win' || tx.type === 'game_loss') return <Gamepad2 size={14} />;
+      return <Activity size={14} />;
+    };
+
+    const iconClass = (tx) => {
+      if (tx.type === 'deposit') return 'bg-green-500/20 text-green-400';
+      if (tx.type === 'withdraw') return 'bg-red-500/20 text-red-400';
+      if (tx.type === 'swap') return 'bg-cyan-500/20 text-cyan-300';
+      if (tx.type === 'unilevel' || tx.type === 'residual' || (tx.type || '').includes('bonus')) return 'bg-purple-500/20 text-purple-300';
+      if ((tx.type || '').startsWith('plan_')) return 'bg-yellow-500/20 text-yellow-300';
+      if (tx.type === 'hft_profit') return num(tx.amount) >= 0 ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400';
+      return 'bg-gray-500/10 text-gray-300';
+    };
+
+    const amountClass = (tx) => {
+      const flow = getFlow(tx);
+      if (flow === 'in') return 'text-green-400';
+      if (flow === 'out') return 'text-red-400';
+      return 'text-white';
+    };
+
+    return (
+      <div className="px-4 pb-24 pt-4 animate-fadeIn">
+        <div className="flex items-center gap-2 mb-6">
+          <button onClick={() => setView('menu')} className="text-gray-400 hover:text-white"><ChevronRight className="rotate-180" /></button>
+          <h2 className="text-2xl font-bold text-white">{t.reports}</h2>
+        </div>
+
+        <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
+          {tabs.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setReportsTab(tab.id)}
+              className={`px-4 py-2 rounded-lg text-sm whitespace-nowrap border transition ${reportsTab === tab.id ? 'bg-gradient-to-r from-yellow-600 to-yellow-500 text-black font-black border-yellow-500/30' : 'bg-gray-800/60 text-gray-300 border-gray-700 hover:bg-gray-800'}`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {filtered.length === 0 ? (
+          <div className="text-center text-gray-400 py-10 text-sm">Nenhuma transação nesta aba.</div>
+        ) : (
+          <div className="space-y-3">
+            {filtered.map((tx, idx) => (
+              <div key={tx.id || idx} className="bg-gray-800/50 p-4 rounded-lg flex justify-between items-center border border-gray-700/50">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${iconClass(tx)}`}>
+                    {iconFor(tx)}
                   </div>
-                  <div>
-                    <p className="text-white text-sm capitalize">{tx.type.replace('_', ' ')}</p>
-                    <p className="text-gray-500 text-xs">{tx.date}</p>
+                  <div className="min-w-0">
+                    <p className="text-white text-sm font-bold truncate">{getTitle(tx)}</p>
+                    <p className="text-gray-500 text-xs truncate">{getMeta(tx)}</p>
                   </div>
                 </div>
-                <span className={`font-mono ${tx.type === 'deposit' || tx.type === 'unilevel' || tx.type === 'residual' ? 'text-green-400' : 'text-white'}`}>
-                  {tx.type === 'deposit' || tx.type === 'unilevel' || tx.type === 'residual' ? '+' : '-'}${Number(tx.amount).toFixed(2)}
-                </span>
+                <span className={`font-mono font-bold ${amountClass(tx)}`}>{formatAmount(tx)}</span>
               </div>
             ))}
+          </div>
+        )}
       </div>
-    </div>
-  );
+    );
+  };
 
   const BottomNav = () => (
-    <div className="w-full bg-gray-900/95 backdrop-blur-md border-t border-gray-800 p-2 z-40 pb-safe shrink-0">
-      <div className="flex justify-around items-center">
+    <div className="w-full bg-gray-950/40 backdrop-blur-2xl border-t border-gray-800/50 p-2 pb-[env(safe-area-inset-bottom,20px)] shrink-0 fixed bottom-0 left-0 right-0 z-[60] md:hidden">
+      <div className="flex justify-around items-center max-w-md mx-auto">
         <NavBtn icon={TrendingUp} id="home" label="Home" active={view === 'home'} />
         <NavBtn icon={Gamepad2} id="game" label="Game" active={view === 'game'} />
         
@@ -999,15 +1332,28 @@ function Dashboard({ currentUser, onLogout }) {
   const NavBtn = ({ icon: Icon, id, label, active }) => (
     <button 
       onClick={() => setView(id)}
-      className={`flex flex-col items-center p-2 transition ${active ? 'text-blue-500' : 'text-gray-500 hover:text-gray-300'}`}
+      className={`flex flex-col items-center p-2 transition ${active ? 'text-yellow-500' : 'text-gray-500 hover:text-gray-300'}`}
     >
       <Icon size={20} />
       <span className="text-[10px] mt-1 font-medium">{label}</span>
     </button>
   );
 
+  const SidebarBtn = ({ icon: Icon, id, label, active }) => (
+    <button 
+      onClick={() => setView(id)}
+      className={`flex items-center gap-3 p-3 rounded-xl transition-all ${active ? 'bg-gradient-to-r from-yellow-600 to-yellow-500 text-black font-black shadow-[0_0_15px_rgba(234,179,8,0.4)]' : 'text-gray-400 hover:bg-gray-800/50 hover:text-white'}`}
+    >
+      <Icon size={20} />
+      <span className="font-bold">{label}</span>
+    </button>
+  );
+
   return (
-    <div className="min-h-screen bg-black text-gray-100 font-sans selection:bg-blue-500/30 overflow-hidden flex justify-center">
+    <div className="h-[100dvh] w-full text-gray-100 font-sans selection:bg-yellow-500/30 flex justify-center md:justify-start fixed inset-0 overflow-hidden md:bg-app-desktop bg-app-mobile bg-fixed">
+      {/* OVERLAY DE SOMBRA PARA O BACKOFFICE */}
+      <div className="absolute inset-0 bg-black/60 z-0 pointer-events-none"></div>
+
       <style>{`
         @keyframes scan {
           0% { transform: translateY(-100%); }
@@ -1032,12 +1378,35 @@ function Dashboard({ currentUser, onLogout }) {
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #374151; border-radius: 4px; }
       `}</style>
+
+      {/* Sidebar Desktop/Tablet */}
+      <div className="hidden md:flex flex-col w-64 bg-gray-950/40 backdrop-blur-xl border-r border-gray-800/50 z-50 p-4 shrink-0 shadow-2xl h-[100dvh] sticky top-0 pb-[calc(env(safe-area-inset-bottom,0px)+2rem)]">
+         <div className="mb-6 mt-2 text-center h-32 relative overflow-hidden">
+             <img src="/logo/logoVdex.png" alt="VDexTrading" className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-32 md:h-36 w-auto max-w-none select-none pointer-events-none drop-shadow-[0_0_12px_rgba(234,179,8,0.35)]" />
+         </div>
+         <div className="flex-1 flex flex-col gap-2 overflow-y-auto custom-scrollbar pr-2">
+             <SidebarBtn icon={TrendingUp} id="home" label="Home" active={view === 'home'} />
+             <SidebarBtn icon={Gamepad2} id="game" label="Game" active={view === 'game'} />
+             <SidebarBtn icon={Zap} id="plans" label="Bots" active={view === 'plans'} />
+             <SidebarBtn icon={Wallet} id="wallet" label="Wallet" active={view === 'wallet'} />
+             <div className="my-2 border-b border-gray-800"></div>
+             <SidebarBtn icon={Users} id="team" label="Rede" active={view === 'team'} />
+             <SidebarBtn icon={FileText} id="reports" label="Relatórios" active={view === 'reports'} />
+             <SidebarBtn icon={Settings} id="settings" label="Configurações" active={view === 'settings'} />
+             <SidebarBtn icon={ShieldCheck} id="support" label="Suporte" active={view === 'support'} />
+         </div>
+         <button onClick={onLogout} className="mt-6 shrink-0 flex items-center justify-center gap-3 p-3 text-red-400 hover:bg-red-500/10 rounded-xl transition border border-red-500/20">
+             <LogOut size={20} /> <span className="font-bold">Sair</span>
+         </button>
+      </div>
       
-      <div className="w-full md:max-w-md bg-black relative shadow-2xl min-h-screen flex flex-col border-x border-gray-900 overflow-hidden">
+      <div className="w-full md:flex-1 lg:max-w-6xl mx-auto bg-gray-950/40 backdrop-blur-md relative shadow-2xl h-[100dvh] flex flex-col md:border-x border-gray-900/50 overflow-hidden pb-[5rem] md:pb-0 z-0">
         <Header />
         
-        <main className="flex-1 w-full overflow-y-auto custom-scrollbar relative">
-            {view === 'home' && <HomeView />}
+        <main className="flex-1 w-full overflow-y-auto overflow-x-hidden custom-scrollbar relative pt-[env(safe-area-inset-top)] z-10 pb-[env(safe-area-inset-bottom,20px)]">
+            <div className={view === 'home' ? '' : 'hidden'}>
+              <HomeView />
+            </div>
             
             {view === 'game' && (
             <GameView 
@@ -1072,7 +1441,9 @@ function Dashboard({ currentUser, onLogout }) {
             {view === 'settings' && <SettingsView />}
         </main>
 
-        <BottomNav />
+        <div className="md:hidden">
+            <BottomNav />
+        </div>
         <NotificationsPanel />
 
         {/* Toast Notification */}

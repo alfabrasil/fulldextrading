@@ -232,8 +232,12 @@ export const QuantumDash = ({ onClose, onGameOver, highScore, userSparks }) => {
     p.y += p.dy;
     p.rotation += 0.15; // Faster rotation
 
+    const isMobile = width < 768;
+    const floorHeight = 60;
+    const uiReservedBottom = isMobile ? 100 : 0;
+
     // Ground Collision
-    const floorY = height - 60; // Raised floor
+    const floorY = height - floorHeight - uiReservedBottom;
     if (p.y + p.h > floorY) {
         p.y = floorY - p.h;
         p.dy = 0;
@@ -363,15 +367,15 @@ export const QuantumDash = ({ onClose, onGameOver, highScore, userSparks }) => {
     // Draw Floor
     ctx.shadowBlur = 25;
     ctx.shadowColor = '#d946ef'; // Fuchsia glow
-    const gradientFloor = ctx.createLinearGradient(0, height - 60, 0, height);
+    const gradientFloor = ctx.createLinearGradient(0, floorY, 0, floorY + floorHeight);
     gradientFloor.addColorStop(0, '#701a75');
     gradientFloor.addColorStop(1, '#0f172a');
     ctx.fillStyle = gradientFloor;
-    ctx.fillRect(0, height - 60, width, 60);
+    ctx.fillRect(0, floorY, width, floorHeight);
     
     // Floor Neon Line
     ctx.fillStyle = '#e879f9'; // Pink-purple
-    ctx.fillRect(0, height - 60, width, 3);
+    ctx.fillRect(0, floorY, width, 3);
     ctx.shadowBlur = 0;
 
     // Draw Player

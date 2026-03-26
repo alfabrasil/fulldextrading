@@ -42,8 +42,8 @@ export const WalletView = ({ t, user, formatCurrency, formatVDT, handleDepositAc
     if (!action) return null;
 
     return (
-      <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4">
-        <div className="bg-gray-900 w-full max-w-md rounded-2xl border border-gray-700 p-6 animate-slideUp max-h-[85vh] sm:max-h-[90vh] overflow-y-auto">
+      <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+        <div className="bg-gray-900 w-full max-w-md rounded-2xl border border-gray-700 p-6 animate-slideUp max-h-[80dvh] sm:max-h-[90vh] overflow-y-auto">
           <div className="flex justify-between items-center mb-6">
             <h3 className="text-xl font-bold text-white capitalize">{t[action]}</h3>
             <button onClick={() => setAction(null)} className="text-gray-400 hover:text-white"><X /></button>
@@ -217,8 +217,8 @@ export const WalletView = ({ t, user, formatCurrency, formatVDT, handleDepositAc
   return (
     <div className="px-4 space-y-6 animate-fadeIn pb-24 max-w-2xl mx-auto">
       {action && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4">
-          <div className="bg-gray-900 w-full max-w-md rounded-2xl border border-gray-700 p-6 animate-slideUp max-h-[85vh] sm:max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-gray-900 w-full max-w-md rounded-2xl border border-gray-700 p-6 animate-slideUp max-h-[80dvh] sm:max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-xl font-bold text-white capitalize">{t[action]}</h3>
               <button onClick={() => setAction(null)} className="text-gray-400 hover:text-white"><X /></button>
