@@ -34,6 +34,7 @@ export const PLANS = [
     max: 5000, 
     roiTotal: 100, 
     duration: 30, // 30 business days
+    withdrawEveryDays: 10,
     color: 'border-purple-500'
   },
   { 
@@ -48,6 +49,7 @@ export const PLANS = [
     max: 10000, 
     roiTotal: 300, 
     duration: 90, // 90 business days
+    withdrawEveryDays: 1,
     color: 'border-yellow-400'
   }
 ];

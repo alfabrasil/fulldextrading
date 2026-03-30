@@ -29,7 +29,7 @@ export const PlansView = ({ t, handleActivatePlan, userBalance, user }) => {
 
   // Cálculo dos saldos
   const saldoRestante = userBalance || 0;
-  const saldoAplicado = user?.activePlan ? parseFloat(user.activePlan.amount) : 0;
+  const saldoAplicado = Array.isArray(user?.activePlans) ? user.activePlans.reduce((acc, c) => acc + (Number(c.amount) || 0), 0) : 0;
   const saldoTotal = saldoRestante + saldoAplicado;
 
   return (

@@ -41,6 +41,8 @@ import { AuthView } from './components/AuthView';
 const SAFE_USER_DEFAULTS = {
     balances: { usdt: 0, usdc: 0, vdt: 0 },
     activePlan: null,
+    activePlans: [],
+    botMode: 'trade',
     history: [],
     notifications: [],
     wallets: {},
@@ -69,6 +71,22 @@ function Dashboard({ currentUser, onLogout }) {
      if (typeof initialUser.balances.vdt !== 'number' || isNaN(initialUser.balances.vdt)) {
          initialUser.balances.vdt = initialUser.balances.fdt || 0; // Tenta migrar FDT antigo ou zera
      }
+     if (!Array.isArray(initialUser.activePlans)) initialUser.activePlans = [];
+     if (initialUser.activePlan && initialUser.activePlans.length === 0) {
+       initialUser.activePlans = [{
+         id: `legacy_${initialUser.activePlan.startAt || Date.now()}`,
+         planId: initialUser.activePlan.planId,
+         amount: initialUser.activePlan.amount,
+         startAt: initialUser.activePlan.startAt || Date.now(),
+         accumulated: initialUser.activePlan.accumulated || 0,
+         dailyState: initialUser.activePlan.dailyState || null,
+         businessDaysCompleted: 0,
+         lastPayoutDayCount: 0,
+         lockedProfit: 0,
+         withdrawableProfit: 0
+       }];
+     }
+     initialUser.activePlan = null;
      return initialUser;
   });
 
@@ -100,39 +118,10 @@ function Dashboard({ currentUser, onLogout }) {
      saveUser();
   }, [user]);
 
-  // Main Background Ticker (Financial Logic) - NETWORK ONLY
+  // Main Background Ticker (Financial Logic) - NETWORK ONLY (disabled)
   useEffect(() => {
-    const interval = setInterval(() => {
-      if (!user.activePlan) return;
-
-      // Network Simulation
-      if (Math.random() < 0.002) { 
-         const levelIndex = Math.floor(Math.random() * 10); 
-         const networkLevel = NETWORK_PLAN[levelIndex];
-         const type = Math.random() > 0.5 ? 'Unilevel' : 'Residual';
-         const amount = (Math.random() * 100 * (networkLevel.percent / 100)).toFixed(2); 
-
-         triggerNotification(
-             'Rede', 
-             `Bônus ${type} Nível ${networkLevel.level}: +$${amount}`,
-             'success'
-         );
-         
-         setUser(prev => ({
-             ...prev,
-             history: [{ 
-                 type: type.toLowerCase(), 
-                 amount: amount, 
-                 date: new Date().toLocaleTimeString(),
-                 desc: `Nível ${networkLevel.level} (${networkLevel.percent}%)`
-             }, ...prev.history]
-         }));
-      }
-
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [user.activePlan]);
+    return; 
+  }, [user.activePlans?.length]);
 
   // --- FUNÇÕES AUXILIARES ---
 
@@ -206,77 +195,145 @@ function Dashboard({ currentUser, onLogout }) {
     return values;
   };
 
+  const generateCyclePnls = (target, cycles) => {
+    const mean = target / cycles;
+    const std = Math.abs(mean) * 2.6;
+    const minPnl = -Math.abs(mean) * 4.5;
+    const maxPnl = Math.abs(mean) * 7.5;
+
+    for (let attempt = 0; attempt < 30; attempt++) {
+      let values = Array.from({ length: cycles }, () => {
+        const v = mean + randN() * std;
+        return Math.max(minPnl, Math.min(maxPnl, v));
+      });
+
+      let sum = values.reduce((a, b) => a + b, 0);
+      const diff = target - sum;
+      const adj = diff / cycles;
+      values = values.map(v => v + adj);
+      sum = values.reduce((a, b) => a + b, 0);
+      values[values.length - 1] += (target - sum);
+
+      const negs = values.filter(v => v < 0).length;
+      if (negs >= Math.max(1, Math.floor(cycles * 0.2)) && Number.isFinite(values[0])) return values;
+    }
+
+    const values = Array.from({ length: cycles }, () => mean);
+    values[values.length - 1] += (target - values.reduce((a, b) => a + b, 0));
+    return values;
+  };
+
+  const buildDailyCycleSequence = ({ dailyTargetPct, dailyTargetProfit, principal }) => {
+    const roundsPlanned = randomInt(3, 4);
+    const roundPcts = roundsPlanned === 4
+      ? [1, 1, 1, Math.max(0.01, dailyTargetPct - 3)]
+      : [1, 1, Math.max(0.01, dailyTargetPct - 2)];
+
+    const seq = [];
+    for (let roundIndex = 0; roundIndex < roundPcts.length; roundIndex++) {
+      const cyclesInRound = randomInt(4, 6);
+      const roundProfit = principal * (roundPcts[roundIndex] / 100);
+      const pnls = generateCyclePnls(roundProfit, cyclesInRound);
+      for (let i = 0; i < pnls.length; i++) {
+        seq.push({ mode: 'trade', targetProfit: pnls[i], roundIndex });
+      }
+      if (roundIndex < roundPcts.length - 1) {
+        const pauseCycles = randomInt(1, 3);
+        for (let j = 0; j < pauseCycles; j++) {
+          seq.push({ mode: 'analysis', targetProfit: 0, roundIndex });
+        }
+      }
+    }
+
+    const sum = seq.reduce((acc, item) => acc + (item.mode === 'trade' ? item.targetProfit : 0), 0);
+    const diff = dailyTargetProfit - sum;
+    for (let i = seq.length - 1; i >= 0; i--) {
+      if (seq[i].mode === 'trade') {
+        seq[i] = { ...seq[i], targetProfit: seq[i].targetProfit + diff };
+        break;
+      }
+    }
+
+    return { roundsPlanned, sequence: seq };
+  };
+
+  const [simOffsetDays, setSimOffsetDays] = useState(0);
+  const [simNight, setSimNight] = useState(false);
+
+  const getNow = () => new Date(Date.now() + simOffsetDays * 86400000);
+
   const [dayTick, setDayTick] = useState(() => Date.now());
 
   useEffect(() => {
-    if (!user.activePlan) return;
+    if (!user.activePlans?.length) return;
     const interval = setInterval(() => setDayTick(Date.now()), 60_000);
     return () => clearInterval(interval);
-  }, [user.activePlan?.planId]);
+  }, [user.activePlans?.length, simOffsetDays, simNight]);
 
   useEffect(() => {
-    if (!user.activePlan) return;
-    const planMeta = PLANS.find(p => p.id === user.activePlan.planId);
-    if (!planMeta) return;
+    if (!user.activePlans?.length) return;
 
-    const now = new Date();
+    const now = getNow();
     const dayKey = getDayKey(now);
-    const biz = isBusinessDay(now);
+    const biz = !simNight && isBusinessDay(now);
 
     setUser(prev => {
-      if (!prev.activePlan) return prev;
-      const current = prev.activePlan.dailyState;
+      const nextActivePlans = (prev.activePlans || []).map(contract => {
+        const planMeta = PLANS.find(p => p.id === contract.planId);
+        if (!planMeta) return contract;
 
-      if (!biz) {
-        if (current?.dayKey === dayKey && current?.status === 'weekend') return prev;
-        return {
-          ...prev,
-          activePlan: {
-            ...prev.activePlan,
+        const current = contract.dailyState;
+        if (!biz) {
+          if (current?.dayKey === dayKey && current?.status === 'weekend') return contract;
+          return {
+            ...contract,
             dailyState: {
               dayKey,
-              status: 'weekend'
+              status: 'weekend',
+              cycleSeconds: 600
             }
-          }
-        };
-      }
+          };
+        }
 
-      const dailyTargetPct = planMeta.roiTotal / planMeta.duration;
-      const dailyTargetProfit = prev.activePlan.amount * (dailyTargetPct / 100);
+        if (current?.dayKey === dayKey && (current.status === 'running' || current.status === 'done')) {
+          return contract;
+        }
 
-      if (current?.dayKey === dayKey && (current.status === 'running' || current.status === 'done')) return prev;
+        const dailyTargetPct = planMeta.roiTotal / planMeta.duration;
+        const principal = Number(contract.amount) || 0;
+        const dailyTargetProfit = principal * (dailyTargetPct / 100);
+        const { roundsPlanned, sequence } = buildDailyCycleSequence({ dailyTargetPct, dailyTargetProfit, principal });
 
-      const minutesPlanned = randomInt(120, 180);
-      const pnlSeries = generateDailyPnls(dailyTargetProfit, minutesPlanned);
-
-      return {
-        ...prev,
-        activePlan: {
-          ...prev.activePlan,
+        return {
+          ...contract,
           dailyState: {
             dayKey,
             status: 'running',
+            cycleSeconds: 600,
             dailyTargetPct,
             dailyTargetProfit,
-            minutesPlanned,
-            minuteIndex: 0,
+            roundsPlanned,
+            cycleIndex: 0,
             profitToday: 0,
-            pnlSeries
+            sequence
           }
-        }
-      };
+        };
+      });
+
+      return { ...prev, activePlans: nextActivePlans };
     });
-  }, [user.activePlan?.planId, user.activePlan?.amount, dayTick]);
+  }, [user.activePlans?.length, dayTick, simOffsetDays, simNight]);
 
-  // --- SYNC HFT (A cada 1 min) ---
-  const handleHftSync = (profit, opsCount) => {
-     if (profit === 0 && opsCount === 0) return;
+  const handleHftSync = (profit, opsCount, breakdown = []) => {
+     if (profit === 0 && opsCount === 0 && (!Array.isArray(breakdown) || breakdown.length === 0)) return;
 
-     const now = new Date();
+     const now = getNow();
      const timeString = now.toLocaleTimeString();
 
-     let completedDailyTarget = false;
-     let completedTargetPct = null;
+     let completedDailyTargets = 0;
+     const totalFromBreakdown = Array.isArray(breakdown) && breakdown.length
+       ? breakdown.reduce((acc, b) => acc + (Number(b.profit) || 0), 0)
+       : Number(profit) || 0;
 
      setUser(prev => {
          // Evitar duplicidade de registros no mesmo segundo (React StrictMode ou Timer Glitch)
@@ -284,65 +341,143 @@ function Dashboard({ currentUser, onLogout }) {
          if (lastEntry && 
              lastEntry.type === 'hft_profit' && 
              lastEntry.date === timeString &&
-             lastEntry.amount === profit.toFixed(4)) {
+             lastEntry.amount === totalFromBreakdown.toFixed(4)) {
              return prev;
          }
 
-         const dailyState = prev.activePlan?.dailyState;
-         let nextDailyState = dailyState;
-         if (dailyState?.status === 'running' && dailyState.dayKey === getDayKey(now)) {
-           const nextIndex = (dailyState.minuteIndex || 0) + 1;
-           const nextProfitToday = (dailyState.profitToday || 0) + profit;
-
-           if (nextIndex >= (dailyState.minutesPlanned || 0)) {
-             completedDailyTarget = true;
-             completedTargetPct = dailyState.dailyTargetPct;
-             nextDailyState = {
-               ...dailyState,
-               status: 'done',
-               minuteIndex: nextIndex,
-               profitToday: dailyState.dailyTargetProfit
-             };
-           } else {
-             nextDailyState = {
-               ...dailyState,
-               minuteIndex: nextIndex,
-               profitToday: nextProfitToday
-             };
-           }
+         const byContract = new Map();
+         if (Array.isArray(breakdown) && breakdown.length) {
+           breakdown.forEach(b => byContract.set(b.contractId, Number(b.profit) || 0));
          }
 
-         return {
+         const nextActivePlans = (prev.activePlans || []).map(contract => {
+           const ds = contract.dailyState;
+           if (!ds || ds.status !== 'running' || ds.dayKey !== getDayKey(now)) return contract;
+
+           const currentItem = ds.sequence?.[ds.cycleIndex];
+           if (!currentItem) return { ...contract, dailyState: { ...ds, status: 'done' } };
+
+           const appliedProfit = byContract.has(contract.id) ? byContract.get(contract.id) : 0;
+           const nextIndex = (ds.cycleIndex || 0) + 1;
+           const nextProfitToday = (ds.profitToday || 0) + appliedProfit;
+           const reachedEnd = nextIndex >= (ds.sequence?.length || 0);
+
+           if (reachedEnd) {
+             completedDailyTargets += 1;
+             const nextBusinessDaysCompleted = (contract.businessDaysCompleted || 0) + 1;
+             const planMeta = PLANS.find(p => p.id === contract.planId);
+             const withdrawEvery = planMeta?.withdrawEveryDays || 1;
+             const lockedProfit = (contract.lockedProfit || 0) + ds.dailyTargetProfit;
+             let withdrawableProfit = contract.withdrawableProfit || 0;
+             let lastPayoutDayCount = contract.lastPayoutDayCount || 0;
+             let nextLocked = lockedProfit;
+
+             if ((nextBusinessDaysCompleted - lastPayoutDayCount) >= withdrawEvery) {
+               withdrawableProfit += nextLocked;
+               nextLocked = 0;
+               lastPayoutDayCount = nextBusinessDaysCompleted;
+             }
+
+             const diffToTarget = ds.dailyTargetProfit - nextProfitToday;
+             return {
+               ...contract,
+               accumulated: (contract.accumulated || 0) + appliedProfit + diffToTarget,
+               businessDaysCompleted: nextBusinessDaysCompleted,
+               lastPayoutDayCount,
+               lockedProfit: nextLocked,
+               withdrawableProfit,
+               dailyState: {
+                 ...ds,
+                 status: 'done',
+                 cycleIndex: nextIndex,
+                 profitToday: ds.dailyTargetProfit
+               }
+             };
+           }
+
+           return {
+             ...contract,
+             accumulated: (contract.accumulated || 0) + appliedProfit,
+             dailyState: {
+               ...ds,
+               cycleIndex: nextIndex,
+               profitToday: nextProfitToday,
+               status: 'running'
+             }
+           };
+         });
+
+        if (totalFromBreakdown === 0 && opsCount === 0) {
+          const nextMode = 'analysis';
+          const shouldLogPause = prev.botMode !== nextMode;
+          return {
             ...prev,
-            activePlan: {
-                ...prev.activePlan,
-                accumulated: (prev.activePlan?.accumulated || 0) + profit,
-                dailyState: nextDailyState
-            },
+            botMode: nextMode,
+            activePlans: nextActivePlans,
+            history: shouldLogPause
+              ? [
+                  {
+                    id: Date.now(),
+                    type: 'bot_pause',
+                    amount: '0.0000',
+                    date: timeString,
+                    desc: 'Analisando próxima entrada (10min)'
+                  },
+                  ...prev.history
+                ]
+              : prev.history
+          };
+        }
+
+        const nextMode = 'trade';
+        const shouldLogResume = prev.botMode !== nextMode;
+
+        return {
+            ...prev,
+            botMode: nextMode,
+            activePlans: nextActivePlans,
             history: [
+                ...(shouldLogResume ? [{
+                    id: Date.now(),
+                    type: 'bot_resume',
+                    amount: '0.0000',
+                    date: timeString,
+                    desc: 'Retomando operações'
+                }] : []),
                 { 
                     id: Date.now(),
                     type: 'hft_profit', 
-                    amount: profit.toFixed(4), 
+                    amount: totalFromBreakdown.toFixed(4), 
                     date: timeString, 
-                    desc: `Ciclo 1min (${opsCount} ops)` 
+                    desc: `Ciclo 10min (${opsCount} ops)` 
                 }, 
                 ...prev.history
             ]
          };
      });
 
-     const sign = profit >= 0 ? '+' : '';
+     if (totalFromBreakdown === 0 && opsCount === 0) {
+       if (user.botMode !== 'analysis') {
+         triggerNotification('BOT', 'Analisando a melhor entrada (10min).', 'info');
+       }
+       return;
+     }
+
+     if (user.botMode === 'analysis') {
+       triggerNotification('BOT', 'Retomando operações.', 'info');
+     }
+
+     const sign = totalFromBreakdown >= 0 ? '+' : '';
      triggerNotification(
          'HFT Report', 
-         `Ciclo finalizado: ${opsCount} operações. Lucro: ${sign}$${profit.toFixed(4)}`,
-         profit >= 0 ? 'success' : 'error'
+         `Ciclo finalizado: ${opsCount} operações. Lucro: ${sign}$${totalFromBreakdown.toFixed(4)}`,
+         totalFromBreakdown >= 0 ? 'success' : 'error'
      );
 
-     if (completedDailyTarget) {
+     if (completedDailyTargets > 0) {
        triggerNotification(
          'Meta Diária',
-         `Meta diária atingida (${Number(completedTargetPct || 0).toFixed(2)}%). Robô pausado até o próximo dia útil.`,
+         `Meta diária atingida. Robô pausado até o próximo dia útil.`,
          'success'
        );
      }
@@ -358,39 +493,28 @@ function Dashboard({ currentUser, onLogout }) {
       return;
     }
 
-    if (user.activePlan) {
-        // UPGRADE LOGIC
-        setUser(prev => ({
-            ...prev,
-            balances: { ...prev.balances, usdt: prev.balances.usdt - amount },
-            activePlan: {
-                ...prev.activePlan,
-                planId: plan.id, // Switch to new plan tier if applicable
-                amount: prev.activePlan.amount + amount
-            },
-            history: [{ 
-                type: 'plan_upgrade', 
-                amount: amount, 
-                date: new Date().toLocaleTimeString(), 
-                desc: `Upgrade ${plan.name} (Total: $${(prev.activePlan.amount + amount).toFixed(2)})` 
-            }, ...prev.history]
-        }));
-        triggerNotification('Sucesso', `Upgrade realizado! Novo capital: $${(user.activePlan.amount + amount).toFixed(2)}`, 'success');
-    } else {
-        // NEW ACTIVATION
-        setUser(prev => ({
-            ...prev,
-            balances: { ...prev.balances, usdt: prev.balances.usdt - amount },
-            activePlan: {
-                planId: plan.id,
-                amount: amount,
-                startAt: Date.now(),
-                accumulated: 0
-            },
-            history: [{ type: 'plan_activation', amount: amount, date: new Date().toLocaleTimeString(), desc: plan.name }, ...prev.history]
-        }));
-        triggerNotification('Sucesso', `${plan.name} ativado com $${amount}!`, 'success');
-    }
+    const contractId = `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+    setUser(prev => ({
+        ...prev,
+        balances: { ...prev.balances, usdt: prev.balances.usdt - amount },
+        activePlans: [
+          {
+            id: contractId,
+            planId: plan.id,
+            amount: amount,
+            startAt: Date.now(),
+            accumulated: 0,
+            dailyState: null,
+            businessDaysCompleted: 0,
+            lastPayoutDayCount: 0,
+            lockedProfit: 0,
+            withdrawableProfit: 0
+          },
+          ...(prev.activePlans || [])
+        ],
+        history: [{ type: 'plan_activation', amount: amount, date: new Date().toLocaleTimeString(), desc: plan.name }, ...prev.history]
+    }));
+    triggerNotification('Sucesso', `${plan.name} ativado com $${amount}!`, 'success');
     setView('home');
   };
 
@@ -628,87 +752,164 @@ function Dashboard({ currentUser, onLogout }) {
     </div>
   );
 
-  const HomeView = () => (
-    <div className="space-y-6 animate-fadeIn pb-24">
-      <div className="text-center mt-4">
-        <p className="text-gray-400 text-sm">{t.balance}</p>
-        <h1 className="text-4xl font-black text-white tracking-tight drop-shadow-lg">
-          {formatCurrency(user.balances.usdt + user.balances.usdc + (user.activePlan?.accumulated || 0))}
-        </h1>
-        {user.activePlan && (
-          <div className="text-green-400 text-sm mt-1 animate-pulse">
-            +{formatCurrency(user.activePlan.accumulated)} {t.profit}
-          </div>
+  const HomeView = () => {
+    const activePlans = user.activePlans || [];
+    const totalCapital = activePlans.reduce((acc, c) => acc + (Number(c.amount) || 0), 0);
+    const totalAccumulated = activePlans.reduce((acc, c) => acc + (Number(c.accumulated) || 0), 0);
+    const totalBalance = user.balances.usdt + user.balances.usdc + totalAccumulated;
+
+    const now = getNow();
+    const dayKey = getDayKey(now);
+
+    const cycleBreakdown = [];
+    let hasAnySchedule = false;
+    let hasRunning = false;
+    let hasAnalysisOnly = true;
+    let allWeekend = activePlans.length > 0;
+    let allDone = activePlans.length > 0;
+    let roundIndexMax = null;
+    let roundsPlannedMax = null;
+
+    for (const c of activePlans) {
+      const ds = c.dailyState;
+      if (!ds) {
+        allWeekend = false;
+        allDone = false;
+        continue;
+      }
+      hasAnySchedule = true;
+      if (ds.status !== 'weekend') allWeekend = false;
+      if (ds.status !== 'done') allDone = false;
+
+      if (ds.status === 'running' && ds.dayKey === dayKey) {
+        hasRunning = true;
+        const item = ds.sequence?.[ds.cycleIndex];
+        if (item?.mode === 'trade') {
+          hasAnalysisOnly = false;
+          cycleBreakdown.push({ contractId: c.id, profit: Number(item.targetProfit) || 0, planId: c.planId });
+        } else if (item) {
+          cycleBreakdown.push({ contractId: c.id, profit: 0, planId: c.planId });
+        }
+        if (typeof item?.roundIndex === 'number') {
+          roundIndexMax = roundIndexMax === null ? item.roundIndex : Math.max(roundIndexMax, item.roundIndex);
+        }
+        if (typeof ds.roundsPlanned === 'number') {
+          roundsPlannedMax = roundsPlannedMax === null ? ds.roundsPlanned : Math.max(roundsPlannedMax, ds.roundsPlanned);
+        }
+      }
+    }
+
+    const cycleTargetProfit = cycleBreakdown.reduce((acc, b) => acc + (Number(b.profit) || 0), 0);
+    const scheduleStatus = allWeekend ? 'weekend' : allDone ? 'done' : hasRunning ? 'running' : 'idle';
+    const schedule = {
+      status: scheduleStatus,
+      mode: hasAnalysisOnly ? 'analysis' : 'trade',
+      cycleSeconds: 600,
+      cycleTargetProfit,
+      breakdown: cycleBreakdown,
+      round: roundIndexMax === null ? null : roundIndexMax + 1,
+      rounds: roundsPlannedMax
+    };
+
+    const yieldTodayPct = (() => {
+      const profitToday = activePlans.reduce((acc, c) => acc + (Number(c.dailyState?.profitToday) || 0), 0);
+      if (!totalCapital) return 0;
+      return (profitToday / totalCapital) * 100;
+    })();
+
+    const botPlan = { planId: `bot_${user.email || 'local'}`, amount: totalCapital };
+
+    return (
+      <div className="space-y-6 animate-fadeIn pb-24">
+        <div className="text-center mt-4">
+          <p className="text-gray-400 text-sm">{t.balance}</p>
+          <h1 className="text-4xl font-black text-white tracking-tight drop-shadow-lg">
+            {formatCurrency(totalBalance)}
+          </h1>
+          {activePlans.length > 0 && (
+            <div className="text-green-400 text-sm mt-1 animate-pulse">
+              +{formatCurrency(totalAccumulated)} {t.profit}
+            </div>
+          )}
+        </div>
+
+        {activePlans.length > 0 ? (
+          <TradingTerminal activePlan={botPlan} schedule={schedule} onSync={handleHftSync} />
+        ) : (
+          <RobotVisual />
         )}
-      </div>
 
-      {/* Condicional: Se tiver plano ativo, mostra Terminal HFT, senão, visual padrão */}
-      {/* Passamos o onSync para que o terminal atualize o saldo a cada 5 min */}
-      {user.activePlan ? <TradingTerminal activePlan={{ ...(PLANS.find(p => p.id === user.activePlan.planId) || {}), ...user.activePlan }} schedule={user.activePlan.dailyState} onSync={handleHftSync} /> : <RobotVisual />}
+        <div className="flex flex-col items-center gap-3">
+          <button 
+            onClick={() => setView('plans')}
+            className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 px-10 rounded-xl shadow-[0_0_20px_rgba(37,99,235,0.6)] transform hover:scale-105 transition active:scale-95 border-b-4 border-blue-800"
+          >
+            {activePlans.length > 0 ? 'ADICIONAR PLANO' : t.choosePlan}
+          </button>
 
-      <div className="flex justify-center">
-        <button 
-          onClick={() => setView('plans')}
-          className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 px-10 rounded-xl shadow-[0_0_20px_rgba(37,99,235,0.6)] transform hover:scale-105 transition active:scale-95 border-b-4 border-blue-800"
-        >
-          {user.activePlan ? 'UPGRADE PLAN' : t.choosePlan}
-        </button>
-      </div>
+          {activePlans.length > 0 && (
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setSimNight(false); setSimOffsetDays(d => d + 1); }}
+                className="text-xs px-3 py-2 rounded-lg bg-gray-800/60 border border-gray-700 text-gray-200 hover:bg-gray-800 transition"
+              >
+                Simular Próximo Dia
+              </button>
+              <button
+                onClick={() => setSimNight(v => !v)}
+                className="text-xs px-3 py-2 rounded-lg bg-gray-800/60 border border-gray-700 text-gray-200 hover:bg-gray-800 transition"
+              >
+                {simNight ? 'Simular Dia' : 'Simular Noite'}
+              </button>
+            </div>
+          )}
+        </div>
 
-      {/* Stats Cards Row */}
-      <div className="grid grid-cols-2 gap-4 px-4 mb-6">
-        <div className="bg-gray-800/50 p-4 rounded-xl border border-gray-700 flex flex-col items-center">
-           <Activity className="text-blue-400 mb-2" size={24} />
-           <span className="text-xs text-gray-400">Yield Today</span>
-           <span className="text-white font-bold text-lg">
-             {(() => {
-               const ds = user.activePlan?.dailyState;
-               if (!ds || ds.status === 'weekend') return '0.00%';
-               const base = Number(user.activePlan?.amount) || 0;
-               const pct = base > 0 ? ((Number(ds.profitToday || 0) / base) * 100) : 0;
-               const shown = `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`;
-               if (ds.status === 'done') return shown;
-               return shown;
-             })()}
-           </span>
+        <div className="grid grid-cols-2 gap-4 px-4 mb-6">
+          <div className="bg-gray-800/50 p-4 rounded-xl border border-gray-700 flex flex-col items-center">
+             <Activity className="text-blue-400 mb-2" size={24} />
+             <span className="text-xs text-gray-400">Yield Today</span>
+             <span className="text-white font-bold text-lg">
+               {`${yieldTodayPct >= 0 ? '+' : ''}${yieldTodayPct.toFixed(2)}%`}
+             </span>
+          </div>
+          <div className="bg-gray-800/50 p-4 rounded-xl border border-gray-700 flex flex-col items-center">
+             <Users className="text-purple-400 mb-2" size={24} />
+             <span className="text-xs text-gray-400">Active Directs</span>
+             <span className="text-white font-bold text-lg">12</span>
+          </div>
         </div>
-        <div className="bg-gray-800/50 p-4 rounded-xl border border-gray-700 flex flex-col items-center">
-           <Users className="text-purple-400 mb-2" size={24} />
-           <span className="text-xs text-gray-400">Active Directs</span>
-           <span className="text-white font-bold text-lg">12</span>
-        </div>
-      </div>
 
-      {/* Latest Activity Feed */}
-      <div className="px-4 pb-6">
-        <div className="flex justify-between items-center mb-3">
-            <h3 className="text-white font-bold text-sm">Latest Activity</h3>
-            <button onClick={() => setView('reports')} className="text-xs text-blue-400 hover:text-blue-300">View All</button>
-        </div>
-        <div className="space-y-2">
-            {user.history.slice(0, 3).map((item, idx) => (
-                <div key={idx} className="bg-gray-800/40 p-3 rounded-lg flex justify-between items-center border border-gray-700/30">
-                    <div className="flex items-center gap-3">
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center ${item.type.includes('profit') ? 'bg-green-500/10 text-green-400' : 'bg-blue-500/10 text-blue-400'}`}>
-                            {item.type.includes('profit') ? <TrendingUp size={14} /> : <Activity size={14} />}
-                        </div>
-                        <div>
-                            <p className="text-white text-xs font-bold capitalize">{item.desc || item.type}</p>
-                            <p className="text-gray-500 text-[10px]">{item.date}</p>
-                        </div>
-                    </div>
-                    <span className={`text-xs font-mono font-bold ${item.type.includes('withdraw') || item.type.includes('activation') ? 'text-red-400' : 'text-green-400'}`}>
-                        {item.type.includes('withdraw') || item.type.includes('activation') ? '-' : '+'}${Number(item.amount).toFixed(2)}
-                    </span>
-                </div>
-            ))}
-            {user.history.length === 0 && (
-                <p className="text-gray-500 text-xs text-center py-2">No recent activity.</p>
-            )}
+        <div className="px-4 pb-6">
+          <div className="flex justify-between items-center mb-3">
+              <h3 className="text-white font-bold text-sm">Latest Activity</h3>
+              <button onClick={() => setView('reports')} className="text-xs text-blue-400 hover:text-blue-300">View All</button>
+          </div>
+          <div className="space-y-2">
+              {user.history.slice(0, 3).map((item, idx) => (
+                  <div key={idx} className="bg-gray-800/40 p-3 rounded-lg flex justify-between items-center border border-gray-700/30">
+                      <div className="flex items-center gap-3">
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center ${item.type.includes('profit') ? 'bg-green-500/10 text-green-400' : 'bg-blue-500/10 text-blue-400'}`}>
+                              {item.type.includes('profit') ? <TrendingUp size={14} /> : <Activity size={14} />}
+                          </div>
+                          <div>
+                              <p className="text-white text-xs font-bold capitalize">{item.desc || item.type}</p>
+                              <p className="text-gray-500 text-[10px]">{item.date}</p>
+                          </div>
+                      </div>
+                      <span className={`text-xs font-mono font-bold ${item.type.includes('withdraw') || item.type.includes('activation') ? 'text-red-400' : 'text-green-400'}`}>
+                          {item.type.includes('withdraw') || item.type.includes('activation') ? '-' : '+'}${Number(item.amount).toFixed(2)}
+                      </span>
+                  </div>
+              ))}
+              {user.history.length === 0 && (
+                  <p className="text-gray-500 text-xs text-center py-2">No recent activity.</p>
+              )}
+          </div>
         </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const SupportView = () => (
     <div className="px-4 pt-6 pb-24 animate-fadeIn space-y-6">
@@ -1203,6 +1404,8 @@ function Dashboard({ currentUser, onLogout }) {
       if (tx.type === 'plan_activation') return 'Plan Activation';
       if (tx.type === 'plan_upgrade') return 'Plan Upgrade';
       if (tx.type === 'hft_profit') return 'HFT Profit';
+      if (tx.type === 'bot_pause') return 'Bot Pause';
+      if (tx.type === 'bot_resume') return 'Bot Resume';
       if (tx.type === 'deposit') return 'Deposit';
       if (tx.type === 'withdraw') return 'Withdraw';
       if (tx.type === 'swap') return 'Swap';
