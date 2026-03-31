@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Cpu, Activity, ShieldCheck, Zap, ArrowUp, ArrowDown, Clock } from 'lucide-react';
 
-export const TradingTerminal = ({ activePlan, schedule, onSync }) => {
+export const TradingTerminal = ({ activePlan, schedule, onSync, fastForwardNonce }) => {
   const [price, setPrice] = useState(1.0542);
   const [history, setHistory] = useState(Array(40).fill(1.0542));
   const [ops, setOps] = useState([]);
@@ -13,6 +13,7 @@ export const TradingTerminal = ({ activePlan, schedule, onSync }) => {
   const [minuteTimeLeft, setMinuteTimeLeft] = useState(Number(schedule?.cycleSeconds) || 600);
   const [minuteReport, setMinuteReport] = useState(null);
   const [currentMinuteStats, setCurrentMinuteStats] = useState({ wins: 0, losses: 0, profit: 0, ops: 0 });
+  const [cycleBadgeTs, setCycleBadgeTs] = useState(0);
   
   const priceRef = useRef(1.0542);
   const profitBufferRef = useRef(0); // Para acumular lucro sem re-renderizar tudo
@@ -26,7 +27,7 @@ export const TradingTerminal = ({ activePlan, schedule, onSync }) => {
   const cycleTargetProfit = scheduleStatus === 'running' && scheduleMode === 'trade'
     ? Number(schedule?.cycleTargetProfit || 0)
     : 0;
-  const breakdown = scheduleStatus === 'running' && scheduleMode === 'trade'
+  const breakdown = scheduleStatus === 'running'
     ? (Array.isArray(schedule?.breakdown) ? schedule.breakdown : [])
     : [];
   const scheduleRef = useRef({ status: scheduleStatus, mode: scheduleMode, cycleSeconds, cycleTargetProfit, breakdown });
@@ -51,11 +52,12 @@ export const TradingTerminal = ({ activePlan, schedule, onSync }) => {
             return;
         }
 
+        const { status, mode, cycleSeconds, cycleTargetProfit, breakdown } = scheduleRef.current;
         const now = Date.now();
         const elapsed = (now - parsed.startTime) / 1000;
         
-        const canRun = scheduleStatus === 'running' || scheduleStatus === 'analysis';
-        const canTrade = scheduleStatus === 'running' && scheduleMode === 'trade';
+        const canRun = status === 'running' || status === 'analysis';
+        const canTrade = status === 'running' && mode === 'trade';
 
         if (!canRun) {
             localStorage.removeItem('hft_cycle_state_v2');
@@ -109,7 +111,7 @@ export const TradingTerminal = ({ activePlan, schedule, onSync }) => {
     } else {
       cycleStartRef.current = Date.now();
     }
-  }, [activePlan.planId, scheduleStatus, scheduleMode, cycleSeconds, cycleTargetProfit]); // Executa na montagem ou se mudar o plano
+  }, [activePlan.planId]); // Executa na montagem ou se mudar o plano
 
   // Salvar estado periodicamente
   useEffect(() => {
@@ -134,6 +136,73 @@ export const TradingTerminal = ({ activePlan, schedule, onSync }) => {
 
   const trendRef = useRef('bull');
   const lastSimTimeRef = useRef(Date.now());
+  const lastFastForwardRef = useRef(0);
+  const lastEndCycleRef = useRef(0);
+
+  const endCycle = (now, forced = false) => {
+    if (now - lastEndCycleRef.current < 500) return;
+    lastEndCycleRef.current = now;
+    const { status, mode, cycleSeconds, cycleTargetProfit, breakdown } = scheduleRef.current;
+    if (!(status === 'running' || status === 'analysis')) return;
+    const canTrade = status === 'running' && mode === 'trade';
+
+    if (canTrade) {
+      if (forced && opsCountRef.current === 0) {
+        opsCountRef.current = randInt(120, 260);
+        setOpsCount(opsCountRef.current);
+      }
+
+      const diff = cycleTargetProfit - profitBufferRef.current;
+      profitBufferRef.current += diff;
+      currentMinuteStatsRef.current.profit += diff;
+      setSessionProfit(p => p + diff);
+      setCurrentMinuteStats(prev => ({ ...prev, profit: prev.profit + diff }));
+    }
+
+    const stats = currentMinuteStatsRef.current;
+    setMinuteReport({
+      ...stats,
+      timestamp: new Date().toLocaleTimeString(),
+      id: now
+    });
+    setCycleBadgeTs(now);
+
+    if (canTrade) {
+      onSync(cycleTargetProfit, opsCountRef.current, breakdown);
+    } else {
+      onSync(0, 0, breakdown);
+    }
+
+    profitBufferRef.current = 0;
+    opsCountRef.current = 0;
+
+    cycleStartRef.current = now;
+    lastSimTimeRef.current = now; 
+    currentMinuteStatsRef.current = { wins: 0, losses: 0, profit: 0, ops: 0 };
+    setCurrentMinuteStats({ wins: 0, losses: 0, profit: 0, ops: 0 });
+    setSessionProfit(0);
+    setOpsCount(0);
+    setOps([]);
+    setMinuteTimeLeft(cycleSeconds);
+  };
+
+  useEffect(() => {
+    if (!fastForwardNonce) return;
+    if (fastForwardNonce === lastFastForwardRef.current) return;
+    lastFastForwardRef.current = fastForwardNonce;
+    const { cycleSeconds } = scheduleRef.current;
+    const now = Date.now();
+    cycleStartRef.current = now;
+    lastSimTimeRef.current = now;
+    profitBufferRef.current = 0;
+    opsCountRef.current = 0;
+    currentMinuteStatsRef.current = { wins: 0, losses: 0, profit: 0, ops: 0 };
+    setCurrentMinuteStats({ wins: 0, losses: 0, profit: 0, ops: 0 });
+    setSessionProfit(0);
+    setOpsCount(0);
+    setOps([]);
+    setMinuteTimeLeft(cycleSeconds);
+  }, [fastForwardNonce]);
 
   // Main HFT Engine Loop (Timer + Simulation + Catch-up)
   useEffect(() => {
@@ -146,35 +215,7 @@ export const TradingTerminal = ({ activePlan, schedule, onSync }) => {
       const elapsed = (now - cycleStart) / 1000;
       
       if (elapsed >= cycleSeconds) {
-        if (canTrade) {
-          const diff = cycleTargetProfit - profitBufferRef.current;
-          profitBufferRef.current += diff;
-          currentMinuteStatsRef.current.profit += diff;
-          setSessionProfit(p => p + diff);
-          setCurrentMinuteStats(prev => ({ ...prev, profit: prev.profit + diff }));
-        }
-
-        const stats = currentMinuteStatsRef.current;
-        setMinuteReport({
-          ...stats,
-          timestamp: new Date().toLocaleTimeString(),
-          id: now
-        });
-
-        if (canTrade) {
-          onSync(cycleTargetProfit, opsCountRef.current, breakdown);
-        } else {
-          onSync(0, 0, breakdown);
-        }
-
-        profitBufferRef.current = 0;
-        opsCountRef.current = 0;
-
-        cycleStartRef.current = now;
-        lastSimTimeRef.current = now; 
-        currentMinuteStatsRef.current = { wins: 0, losses: 0, profit: 0, ops: 0 };
-        setCurrentMinuteStats({ wins: 0, losses: 0, profit: 0, ops: 0 });
-        setMinuteTimeLeft(cycleSeconds);
+        endCycle(now);
         return; 
       }
       
@@ -348,13 +389,18 @@ export const TradingTerminal = ({ activePlan, schedule, onSync }) => {
                   {(scheduleStatus === 'running' || scheduleStatus === 'analysis') ? formatTime(Math.floor(minuteTimeLeft)) : '--'}
                 </span>
              </div>
+             {cycleBadgeTs > 0 && (Date.now() - cycleBadgeTs < 2500) && (
+               <span className="mt-2 text-[10px] font-mono bg-green-600/15 text-green-300 px-2 py-1 rounded">
+                 Ciclo atual concluído
+               </span>
+             )}
           </div>
         </div>
 
         {scheduleStatus === 'running' && scheduleMode === 'analysis' && (
           <div className="px-4 py-3 bg-yellow-500/10 border-b border-yellow-500/20 text-yellow-200 text-xs flex items-center justify-between">
             <span className="font-bold tracking-wide">
-              ANALISANDO A MELHOR ENTRADA{schedule?.round && schedule?.rounds ? ` • RODADA ${schedule.round}/${schedule.rounds}` : ''}
+              ANALISANDO A MELHOR ENTRADA
             </span>
             <span className="text-yellow-300/80 font-mono">Retorno automático</span>
           </div>

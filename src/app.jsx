@@ -62,6 +62,8 @@ function Dashboard({ currentUser, onLogout }) {
   const [showNotif, setShowNotif] = useState(false);
   const [toast, setToast] = useState(null);
   const [reportsTab, setReportsTab] = useState('all');
+  const botModeRef = useRef('trade');
+  const fastForwardClickRef = useRef(0);
 
   // --- DADOS DO USUÁRIO (Persistidos) ---
   // Merge inicial com defaults para garantir que campos como notifications existam
@@ -96,6 +98,10 @@ function Dashboard({ currentUser, onLogout }) {
     if (view === 'reports') setReportsTab('all');
   }, [view]);
 
+  useEffect(() => {
+    botModeRef.current = user.botMode || 'trade';
+  }, [user.botMode]);
+
   // --- EFEITOS DE LOOP ---
   // Atualiza user no Dashboard -> Atualiza no App pai -> Persiste
   useEffect(() => {
@@ -125,8 +131,13 @@ function Dashboard({ currentUser, onLogout }) {
 
   // --- FUNÇÕES AUXILIARES ---
 
+  const makeId = () => {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+    return `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+  };
+
   const triggerNotification = (title, msg, type = 'info') => {
-    const newNotif = { id: Date.now(), title, msg, read: false, time: new Date().toLocaleTimeString(), type };
+    const newNotif = { id: makeId(), title, msg, read: false, time: new Date().toLocaleTimeString(), type };
     setUser(prev => ({
       ...prev,
       notifications: [newNotif, ...prev.notifications]
@@ -231,7 +242,9 @@ function Dashboard({ currentUser, onLogout }) {
 
     const seq = [];
     for (let roundIndex = 0; roundIndex < roundPcts.length; roundIndex++) {
-      const cyclesInRound = randomInt(4, 6);
+      const isLastRound = roundIndex === roundPcts.length - 1;
+      const isSmallLastRound = isLastRound && roundPcts[roundIndex] < 1;
+      const cyclesInRound = isSmallLastRound ? randomInt(2, 3) : randomInt(4, 6);
       const roundProfit = principal * (roundPcts[roundIndex] / 100);
       const pnls = generateCyclePnls(roundProfit, cyclesInRound);
       for (let i = 0; i < pnls.length; i++) {
@@ -258,7 +271,7 @@ function Dashboard({ currentUser, onLogout }) {
   };
 
   const [simOffsetDays, setSimOffsetDays] = useState(0);
-  const [simNight, setSimNight] = useState(false);
+  const [fastForwardNonce, setFastForwardNonce] = useState(0);
 
   const getNow = () => new Date(Date.now() + simOffsetDays * 86400000);
 
@@ -268,14 +281,14 @@ function Dashboard({ currentUser, onLogout }) {
     if (!user.activePlans?.length) return;
     const interval = setInterval(() => setDayTick(Date.now()), 60_000);
     return () => clearInterval(interval);
-  }, [user.activePlans?.length, simOffsetDays, simNight]);
+  }, [user.activePlans?.length, simOffsetDays]);
 
   useEffect(() => {
     if (!user.activePlans?.length) return;
 
     const now = getNow();
     const dayKey = getDayKey(now);
-    const biz = !simNight && isBusinessDay(now);
+    const biz = isBusinessDay(now);
 
     setUser(prev => {
       const nextActivePlans = (prev.activePlans || []).map(contract => {
@@ -322,7 +335,7 @@ function Dashboard({ currentUser, onLogout }) {
 
       return { ...prev, activePlans: nextActivePlans };
     });
-  }, [user.activePlans?.length, dayTick, simOffsetDays, simNight]);
+  }, [user.activePlans?.length, dayTick, simOffsetDays]);
 
   const handleHftSync = (profit, opsCount, breakdown = []) => {
      if (profit === 0 && opsCount === 0 && (!Array.isArray(breakdown) || breakdown.length === 0)) return;
@@ -417,7 +430,7 @@ function Dashboard({ currentUser, onLogout }) {
             history: shouldLogPause
               ? [
                   {
-                    id: Date.now(),
+                    id: makeId(),
                     type: 'bot_pause',
                     amount: '0.0000',
                     date: timeString,
@@ -438,14 +451,14 @@ function Dashboard({ currentUser, onLogout }) {
             activePlans: nextActivePlans,
             history: [
                 ...(shouldLogResume ? [{
-                    id: Date.now(),
+                    id: makeId(),
                     type: 'bot_resume',
                     amount: '0.0000',
                     date: timeString,
                     desc: 'Retomando operações'
                 }] : []),
                 { 
-                    id: Date.now(),
+                    id: makeId(),
                     type: 'hft_profit', 
                     amount: totalFromBreakdown.toFixed(4), 
                     date: timeString, 
@@ -457,13 +470,13 @@ function Dashboard({ currentUser, onLogout }) {
      });
 
      if (totalFromBreakdown === 0 && opsCount === 0) {
-       if (user.botMode !== 'analysis') {
+       if (botModeRef.current !== 'analysis') {
          triggerNotification('BOT', 'Analisando a melhor entrada (10min).', 'info');
        }
        return;
      }
 
-     if (user.botMode === 'analysis') {
+     if (botModeRef.current === 'analysis') {
        triggerNotification('BOT', 'Retomando operações.', 'info');
      }
 
@@ -752,17 +765,11 @@ function Dashboard({ currentUser, onLogout }) {
     </div>
   );
 
-  const HomeView = () => {
-    const activePlans = user.activePlans || [];
-    const totalCapital = activePlans.reduce((acc, c) => acc + (Number(c.amount) || 0), 0);
-    const totalAccumulated = activePlans.reduce((acc, c) => acc + (Number(c.accumulated) || 0), 0);
-    const totalBalance = user.balances.usdt + user.balances.usdc + totalAccumulated;
-
+  const buildBotSchedule = (activePlans) => {
     const now = getNow();
     const dayKey = getDayKey(now);
 
     const cycleBreakdown = [];
-    let hasAnySchedule = false;
     let hasRunning = false;
     let hasAnalysisOnly = true;
     let allWeekend = activePlans.length > 0;
@@ -777,7 +784,6 @@ function Dashboard({ currentUser, onLogout }) {
         allDone = false;
         continue;
       }
-      hasAnySchedule = true;
       if (ds.status !== 'weekend') allWeekend = false;
       if (ds.status !== 'done') allDone = false;
 
@@ -799,17 +805,38 @@ function Dashboard({ currentUser, onLogout }) {
       }
     }
 
-    const cycleTargetProfit = cycleBreakdown.reduce((acc, b) => acc + (Number(b.profit) || 0), 0);
-    const scheduleStatus = allWeekend ? 'weekend' : allDone ? 'done' : hasRunning ? 'running' : 'idle';
-    const schedule = {
-      status: scheduleStatus,
+    return {
+      status: allWeekend ? 'weekend' : allDone ? 'done' : hasRunning ? 'running' : 'idle',
       mode: hasAnalysisOnly ? 'analysis' : 'trade',
       cycleSeconds: 600,
-      cycleTargetProfit,
+      cycleTargetProfit: cycleBreakdown.reduce((acc, b) => acc + (Number(b.profit) || 0), 0),
       breakdown: cycleBreakdown,
       round: roundIndexMax === null ? null : roundIndexMax + 1,
       rounds: roundsPlannedMax
     };
+  };
+
+  const handleAdvanceTenMinutes = () => {
+    const now = Date.now();
+    if (now - fastForwardClickRef.current < 800) return;
+    fastForwardClickRef.current = now;
+
+    const activePlans = user.activePlans || [];
+    if (!activePlans.length) return;
+    const schedule = buildBotSchedule(activePlans);
+    if (!(schedule.status === 'running')) return;
+
+    const opsCount = schedule.mode === 'trade' ? randomInt(120, 260) : 0;
+    handleHftSync(schedule.cycleTargetProfit, opsCount, schedule.breakdown);
+    setFastForwardNonce(n => n + 1);
+  };
+
+  const HomeView = () => {
+    const activePlans = user.activePlans || [];
+    const totalCapital = activePlans.reduce((acc, c) => acc + (Number(c.amount) || 0), 0);
+    const totalAccumulated = activePlans.reduce((acc, c) => acc + (Number(c.accumulated) || 0), 0);
+    const totalBalance = user.balances.usdt + user.balances.usdc + totalAccumulated;
+    const schedule = buildBotSchedule(activePlans);
 
     const yieldTodayPct = (() => {
       const profitToday = activePlans.reduce((acc, c) => acc + (Number(c.dailyState?.profitToday) || 0), 0);
@@ -834,7 +861,7 @@ function Dashboard({ currentUser, onLogout }) {
         </div>
 
         {activePlans.length > 0 ? (
-          <TradingTerminal activePlan={botPlan} schedule={schedule} onSync={handleHftSync} />
+          <TradingTerminal activePlan={botPlan} schedule={schedule} onSync={handleHftSync} fastForwardNonce={fastForwardNonce} />
         ) : (
           <RobotVisual />
         )}
@@ -850,16 +877,16 @@ function Dashboard({ currentUser, onLogout }) {
           {activePlans.length > 0 && (
             <div className="flex gap-2">
               <button
-                onClick={() => { setSimNight(false); setSimOffsetDays(d => d + 1); }}
+                onClick={() => setSimOffsetDays(d => d + 1)}
                 className="text-xs px-3 py-2 rounded-lg bg-gray-800/60 border border-gray-700 text-gray-200 hover:bg-gray-800 transition"
               >
                 Simular Próximo Dia
               </button>
               <button
-                onClick={() => setSimNight(v => !v)}
+                onClick={handleAdvanceTenMinutes}
                 className="text-xs px-3 py-2 rounded-lg bg-gray-800/60 border border-gray-700 text-gray-200 hover:bg-gray-800 transition"
               >
-                {simNight ? 'Simular Dia' : 'Simular Noite'}
+                Avançar 10min
               </button>
             </div>
           )}
