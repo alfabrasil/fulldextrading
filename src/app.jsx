@@ -64,6 +64,7 @@ function Dashboard({ currentUser, onLogout }) {
   const [reportsTab, setReportsTab] = useState('all');
   const botModeRef = useRef('trade');
   const fastForwardClickRef = useRef(0);
+  const terminalRef = useRef(null);
 
   // --- DADOS DO USUÁRIO (Persistidos) ---
   // Merge inicial com defaults para garantir que campos como notifications existam
@@ -271,7 +272,6 @@ function Dashboard({ currentUser, onLogout }) {
   };
 
   const [simOffsetDays, setSimOffsetDays] = useState(0);
-  const [fastForwardNonce, setFastForwardNonce] = useState(0);
 
   const getNow = () => new Date(Date.now() + simOffsetDays * 86400000);
 
@@ -820,15 +820,8 @@ function Dashboard({ currentUser, onLogout }) {
     const now = Date.now();
     if (now - fastForwardClickRef.current < 800) return;
     fastForwardClickRef.current = now;
-
-    const activePlans = user.activePlans || [];
-    if (!activePlans.length) return;
-    const schedule = buildBotSchedule(activePlans);
-    if (!(schedule.status === 'running')) return;
-
-    const opsCount = schedule.mode === 'trade' ? randomInt(120, 260) : 0;
-    handleHftSync(schedule.cycleTargetProfit, opsCount, schedule.breakdown);
-    setFastForwardNonce(n => n + 1);
+    if (!(user.activePlans || []).length) return;
+    terminalRef.current?.advanceOneCycle?.();
   };
 
   const HomeView = () => {
@@ -861,7 +854,7 @@ function Dashboard({ currentUser, onLogout }) {
         </div>
 
         {activePlans.length > 0 ? (
-          <TradingTerminal activePlan={botPlan} schedule={schedule} onSync={handleHftSync} fastForwardNonce={fastForwardNonce} />
+          <TradingTerminal ref={terminalRef} activePlan={botPlan} schedule={schedule} onSync={handleHftSync} />
         ) : (
           <RobotVisual />
         )}
@@ -884,7 +877,12 @@ function Dashboard({ currentUser, onLogout }) {
               </button>
               <button
                 onClick={handleAdvanceTenMinutes}
-                className="text-xs px-3 py-2 rounded-lg bg-gray-800/60 border border-gray-700 text-gray-200 hover:bg-gray-800 transition"
+                disabled={buildBotSchedule(activePlans).status === 'done'}
+                className={`text-xs px-3 py-2 rounded-lg border transition ${
+                  buildBotSchedule(activePlans).status === 'done'
+                    ? 'bg-gray-900/40 border-gray-800 text-gray-600 cursor-not-allowed'
+                    : 'bg-gray-800/60 border-gray-700 text-gray-200 hover:bg-gray-800'
+                }`}
               >
                 Avançar 10min
               </button>

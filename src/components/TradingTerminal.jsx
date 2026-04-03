@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useImperativeHandle } from 'react';
 import { Cpu, Activity, ShieldCheck, Zap, ArrowUp, ArrowDown, Clock } from 'lucide-react';
 
-export const TradingTerminal = ({ activePlan, schedule, onSync, fastForwardNonce }) => {
+export const TradingTerminal = React.forwardRef(({ activePlan, schedule, onSync }, ref) => {
   const [price, setPrice] = useState(1.0542);
   const [history, setHistory] = useState(Array(40).fill(1.0542));
   const [ops, setOps] = useState([]);
@@ -136,7 +136,6 @@ export const TradingTerminal = ({ activePlan, schedule, onSync, fastForwardNonce
 
   const trendRef = useRef('bull');
   const lastSimTimeRef = useRef(Date.now());
-  const lastFastForwardRef = useRef(0);
   const lastEndCycleRef = useRef(0);
 
   const endCycle = (now, forced = false) => {
@@ -186,23 +185,11 @@ export const TradingTerminal = ({ activePlan, schedule, onSync, fastForwardNonce
     setMinuteTimeLeft(cycleSeconds);
   };
 
-  useEffect(() => {
-    if (!fastForwardNonce) return;
-    if (fastForwardNonce === lastFastForwardRef.current) return;
-    lastFastForwardRef.current = fastForwardNonce;
-    const { cycleSeconds } = scheduleRef.current;
-    const now = Date.now();
-    cycleStartRef.current = now;
-    lastSimTimeRef.current = now;
-    profitBufferRef.current = 0;
-    opsCountRef.current = 0;
-    currentMinuteStatsRef.current = { wins: 0, losses: 0, profit: 0, ops: 0 };
-    setCurrentMinuteStats({ wins: 0, losses: 0, profit: 0, ops: 0 });
-    setSessionProfit(0);
-    setOpsCount(0);
-    setOps([]);
-    setMinuteTimeLeft(cycleSeconds);
-  }, [fastForwardNonce]);
+  useImperativeHandle(ref, () => ({
+    advanceOneCycle: () => {
+      endCycle(Date.now(), true);
+    }
+  }), []);
 
   // Main HFT Engine Loop (Timer + Simulation + Catch-up)
   useEffect(() => {
@@ -549,4 +536,4 @@ export const TradingTerminal = ({ activePlan, schedule, onSync, fastForwardNonce
       </div>
     </div>
   );
-};
+});
